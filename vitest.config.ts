@@ -9,5 +9,14 @@ export default defineConfig({
   },
   test: {
     environment: "node",
+    // Several test files are integration tests against a real, shared
+    // PostgreSQL test database and a real, shared Redis instance (not a
+    // mock or an in-memory fake). Running test files in parallel would let
+    // one file's cleanup (TRUNCATE / key deletion) race against another
+    // file's inserts on that same shared data, producing flaky failures
+    // that have nothing to do with the code under test. Files still run
+    // fast because each file's own tests are cheap; only cross-file
+    // parallelism is disabled.
+    fileParallelism: false,
   },
 });

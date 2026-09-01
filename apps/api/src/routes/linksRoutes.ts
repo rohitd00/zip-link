@@ -1,12 +1,23 @@
+import type { NextFunction, Request, Response } from "express";
 import { Router } from "express";
 import type { LinksController } from "../controllers/linksController";
 import { asyncRouteHandler } from "../middleware/asyncRouteHandler";
 
-export function createLinksRoutes(linksController: LinksController): Router {
+type RequestHandler = (request: Request, response: Response, next: NextFunction) => void;
+
+// The rate limiter is a parameter, not a module-level import, so it only
+// ever applies to the one route that passes it in below (POST). GET and
+// DELETE never see it: a popular link's owner must always be able to check
+// or remove it regardless of how many links they recently created.
+export function createLinksRoutes(
+  linksController: LinksController,
+  creationRateLimitMiddleware: RequestHandler,
+): Router {
   const router = Router();
 
   router.post(
     "/api/links",
+    creationRateLimitMiddleware,
     asyncRouteHandler((request, response) => linksController.createLink(request, response)),
   );
 

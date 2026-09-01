@@ -5,11 +5,12 @@ analytics must never slow them down.** Redirect resolution is a cache-first, low
 read path. Click analytics are captured asynchronously through a queue and processed by a
 separate worker, so a slow database write or GeoIP lookup can never delay a visitor.
 
-> **Project status:** Phase 0–2 of the implementation plan are complete: repository
-> foundation, database schema, and a fully working database-backed link
-> create/list/detail/delete/redirect flow. Redis caching, the analytics queue/worker, the
-> analytics API, and the React dashboard are **not implemented yet** — see
-> [Implementation status](#implementation-status) below.
+> **Project status:** Phases 0–3 of the implementation plan are complete: repository
+> foundation, database schema, a fully working database-backed link
+> create/list/detail/delete/redirect flow, Redis cache-aside redirects, and Redis-backed
+> creation rate limiting. The analytics queue/worker, the analytics API, and the React
+> dashboard are **not implemented yet** — see [Implementation status](#implementation-status)
+> below.
 
 Full product/technical documentation lives in [`docs/`](docs/):
 [PRD](docs/01-prd.md) · [Technical specification](docs/02-technical-specification.md) ·
@@ -57,44 +58,50 @@ Full product/technical documentation lives in [`docs/`](docs/):
                                   +-------------+
 ```
 
-Today, only the API + PostgreSQL portion of this diagram exists. The Redis, BullMQ, and
-analytics-worker portions are designed (see the schema and technical spec) but not yet
-built.
+Today, the API + PostgreSQL + Redis (cache and rate limiting) portions of this diagram
+exist. The BullMQ queue and analytics-worker portions are designed (see the schema and
+technical spec) but not yet built.
 
 ## Implementation status
 
-| Area                                                                                    | Status                                                                                  |
-| --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| Repository layout, TypeScript, lint/format/test tooling                                 | Done                                                                                    |
-| Database migrations (`links`, partitioned `click_events`, dedupe, rollups, checkpoints) | Done                                                                                    |
-| Base62 short-code encoder/decoder                                                       | Done                                                                                    |
-| URL validation/normalization, alias validation, expiry validation                       | Done                                                                                    |
-| Owner-context (anonymous signed cookie)                                                 | Done                                                                                    |
-| Link create / list / get / delete (PostgreSQL only, no cache)                           | Done                                                                                    |
-| Public redirect (`GET /:code`), 404/410 pages                                           | Done                                                                                    |
-| Health checks (`/health/live`, `/health/ready`)                                         | Done                                                                                    |
-| Redis cache-aside redirect + production rate limiting                                   | Not started                                                                             |
-| BullMQ click-event queue + analytics worker (UA/GeoIP/IP-hash)                          | Not started                                                                             |
-| Analytics API + rollups                                                                 | Not started                                                                             |
-| React/Tailwind dashboard                                                                | Not started                                                                             |
-| Docker images for API/worker/web, full container journey                                | `docker-compose.yml` written for Postgres+Redis; not yet wired to API/worker containers |
-| Load benchmarking                                                                       | Not started                                                                             |
+| Area                                                                                    | Status                                                                                                                               |
+| --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Repository layout, TypeScript, lint/format/test tooling                                 | Done                                                                                                                                 |
+| Database migrations (`links`, partitioned `click_events`, dedupe, rollups, checkpoints) | Done                                                                                                                                 |
+| Base62 short-code encoder/decoder                                                       | Done                                                                                                                                 |
+| URL validation/normalization, alias validation, expiry validation                       | Done                                                                                                                                 |
+| Owner-context (anonymous signed cookie)                                                 | Done                                                                                                                                 |
+| Link create / list / get / delete (PostgreSQL only)                                     | Done                                                                                                                                 |
+| Public redirect (`GET /:code`), 404/410 pages                                           | Done                                                                                                                                 |
+| Health checks (`/health/live`, `/health/ready`)                                         | Done — reports PostgreSQL and Redis status separately                                                                                |
+| Redis cache-aside redirect (read-through + write-through, TTL bounded by expiry)        | Done                                                                                                                                 |
+| Redis-backed creation rate limiting (fail-open on Redis outage)                         | Done                                                                                                                                 |
+| BullMQ click-event queue + analytics worker (UA/GeoIP/IP-hash)                          | Not started                                                                                                                          |
+| Analytics API + rollups                                                                 | Not started                                                                                                                          |
+| React/Tailwind dashboard                                                                | Not started                                                                                                                          |
+| Docker images for API/worker/web, full container journey                                | `docker-compose.yml` starts Postgres+Redis and is actually used for Redis in local dev (see below); API/worker not yet containerized |
+| Load benchmarking                                                                       | Not started                                                                                                                          |
 
 This matches the "foundation first" phased approach in
-[the implementation plan](docs/06-implementation-plan.md): Phases 0–2 are complete: a
-correct, database-backed shortener that can be demonstrated without Redis or the worker.
-Phases 3 onward (cache, queue, analytics, dashboard, hardening, benchmarks) come next.
+[the implementation plan](docs/06-implementation-plan.md): Phases 0–3 are complete: a
+correct, cache-accelerated shortener with abuse-resistant creation, demonstrable without
+the analytics worker. Phase 4 onward (queue, analytics, dashboard, hardening, benchmarks)
+come next.
 
 ## Tech stack
 
 - **Language:** TypeScript, strict mode, no `any`.
 - **API:** Node.js + Express.
 - **Database:** PostgreSQL 16+ (developed and tested against PostgreSQL 18 locally).
+- **Cache / rate limiter:** Redis 7, via [`ioredis`](https://github.com/redis/ioredis)
+  (chosen for its BullMQ compatibility, since the analytics queue in a later phase needs
+  it too).
 - **Migrations:** [`node-pg-migrate`](https://github.com/salsita/node-pg-migrate), plain
   SQL inside JS migration files — no ORM.
 - **Testing:** [Vitest](https://vitest.dev/) for unit and integration tests,
-  [Supertest](https://github.com/ladjs/supertest) for HTTP-level tests against a real test
-  database.
+  [Supertest](https://github.com/ladjs/supertest) for HTTP-level tests against real test
+  PostgreSQL and Redis instances (not mocks). Test files run sequentially (not in
+  parallel) — see the comment in `vitest.config.ts` for why.
 - **Linting/formatting:** ESLint (flat config) + Prettier.
 
 ### A note on the repository layout
@@ -116,8 +123,9 @@ same as a workspace for this project's needs, with one less moving part.
 
 - Node.js 20+
 - A PostgreSQL 16+ server (this project was built against a **native Windows PostgreSQL
-  18 install**, not Docker — see below)
-- Redis (only needed starting in Phase 3; not required yet)
+  18 install**, not Docker — see [Using Docker instead](#using-docker-instead))
+- A Redis 7 server (this project runs it via **Docker Desktop** — `docker compose up -d
+redis` — while PostgreSQL stays native; see below)
 
 ### 1. Install dependencies
 
@@ -159,7 +167,25 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 The API validates every required variable at startup and fails fast with a specific,
 readable message if one is missing — see `apps/api/src/config/environment.ts`.
 
-### 4. Run database migrations
+### 4. Start Redis
+
+```bash
+docker compose up -d redis
+```
+
+This starts only the Redis service from `docker-compose.yml` (PostgreSQL stays native, as
+set up in step 2). Confirm it's reachable:
+
+```bash
+docker exec url-shortener-redis redis-cli ping   # expect PONG
+```
+
+If `docker` isn't on your `PATH` even though Docker Desktop is running, it's likely
+installed under `%LOCALAPPDATA%\Programs\DockerDesktop\resources\bin\docker.exe` rather
+than the older `Program Files\Docker\Docker` location — call it by its full path, or add
+that folder to `PATH`.
+
+### 5. Run database migrations
 
 ```bash
 npm run migrate:up
@@ -176,7 +202,7 @@ DATABASE_URL="$DATABASE_TEST_URL" npm run migrate:up
 
 (On Windows PowerShell: `$env:DATABASE_URL=$env:DATABASE_TEST_URL; npm run migrate:up`.)
 
-### 5. Run the API
+### 6. Run the API
 
 ```bash
 npm run dev:api
@@ -192,19 +218,22 @@ curl -i -c cookies.txt -b cookies.txt -X POST http://localhost:3000/api/links \
 curl -i http://localhost:3000/<returned-short-code>
 ```
 
-### Using Docker instead
+### Using Docker for PostgreSQL too
 
-If you have Docker Desktop running, `docker-compose.yml` starts PostgreSQL and Redis:
+The setup above runs Redis in Docker and PostgreSQL natively — that's what this project
+actually runs on locally. If you'd rather run PostgreSQL in Docker as well,
+`docker-compose.yml` also defines a `postgres` service:
 
 ```bash
 docker compose up -d
 ```
 
 Update `.env` to match the compose file's credentials (`url_shortener_app` /
-`local_dev_password_change_me`, database `url_shortener_dev`, host `localhost`), then run
-migrations and the API exactly as above. The API and worker are not yet containerized
-(that lands in a later hardening phase); run them with `npm run dev:api` / `npm run
-dev:worker` against the containerized Postgres/Redis.
+`local_dev_password_change_me`, database `url_shortener_dev`, host `localhost`) instead of
+the native-install credentials from step 2, then run migrations and the API exactly as
+above. Either way, the API and worker themselves are not yet containerized (that lands in
+a later hardening phase); run them with `npm run dev:api` / `npm run dev:worker` against
+whichever Postgres/Redis you chose.
 
 ## Running quality checks
 
@@ -216,10 +245,11 @@ npm test                # Vitest — unit tests plus integration tests against D
 ```
 
 All four must pass before a change is considered complete, per the project rules.
-Integration tests (`apps/api/src/repositories/linkRepository.test.ts`,
-`apps/api/src/app.test.ts`) require a running, migrated `url_shortener_test` database and
-truncate its tables between tests — never point `DATABASE_TEST_URL` at a database with
-data you care about.
+Integration tests require a running, migrated `url_shortener_test` database **and** a
+running Redis (the same `REDIS_URL` used by the API — tests only ever touch the
+`redirect:link:*` and `rate-limit:create:*` key prefixes, scoped by name, never a broad
+flush). They truncate/clear that data between tests — never point `DATABASE_TEST_URL` or
+`REDIS_URL` at data you care about.
 
 ### Partition maintenance
 
@@ -240,15 +270,15 @@ All management endpoints are under `/api` and require the anonymous owner-contex
 every reserved path, so `api`, `health`, and other reserved words can never be interpreted
 as a short code.
 
-| Method   | Path               | Purpose                                                                                                                                                        |
-| -------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST`   | `/api/links`       | Create a link (generated code or custom alias); returns an existing link instead of a duplicate by default.                                                    |
-| `GET`    | `/api/links`       | List the current owner's active links, newest first, with cursor pagination and optional search.                                                               |
-| `GET`    | `/api/links/:code` | Read one owned link's metadata and click count.                                                                                                                |
-| `DELETE` | `/api/links/:code` | Soft-delete an owned link. Idempotent; returns a generic 404 for a link you don't own.                                                                         |
-| `GET`    | `/:code`           | Public redirect. `302` on success, `404` for unknown/deleted, `410` for expired. Add `Accept: application/json` for a JSON error body instead of an HTML page. |
-| `GET`    | `/health/live`     | Liveness — process is responding. Never touches a dependency.                                                                                                  |
-| `GET`    | `/health/ready`    | Readiness — confirms PostgreSQL is reachable, with a short timeout.                                                                                            |
+| Method   | Path               | Purpose                                                                                                                                                                                                                                                                                                        |
+| -------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST`   | `/api/links`       | Create a link (generated code or custom alias); returns an existing link instead of a duplicate by default. Rate-limited per owner (`429` + `Retry-After` once exceeded); the public redirect route below is never subject to this limit.                                                                      |
+| `GET`    | `/api/links`       | List the current owner's active links, newest first, with cursor pagination and optional search.                                                                                                                                                                                                               |
+| `GET`    | `/api/links/:code` | Read one owned link's metadata and click count.                                                                                                                                                                                                                                                                |
+| `DELETE` | `/api/links/:code` | Soft-delete an owned link. Idempotent; returns a generic 404 for a link you don't own.                                                                                                                                                                                                                         |
+| `GET`    | `/:code`           | Public redirect. Cache-aside: checks Redis first, falls back to PostgreSQL on a miss or Redis error, and backfills the cache. `302` on success, `404` for unknown/deleted, `410` for expired. Add `Accept: application/json` for a JSON error body instead of an HTML page.                                    |
+| `GET`    | `/health/live`     | Liveness — process is responding. Never touches a dependency.                                                                                                                                                                                                                                                  |
+| `GET`    | `/health/ready`    | Readiness — `{ "status": "ok" \| "unavailable", "dependencies": { "database": "ok" \| "unavailable", "cache": "ok" \| "degraded" } }`. Only a PostgreSQL failure returns `503`; Redis being down is reported as `"degraded"` but does not fail readiness, since redirects still work (just slower) without it. |
 
 Every error response has the shape:
 
@@ -274,6 +304,14 @@ Every error response has the shape:
 - All SQL is parameterized; nothing user-supplied is concatenated into a query.
 - Error responses never include stack traces, SQL errors, or internal configuration —
   only a stable error code, a safe message, and a request ID for support correlation.
+- Link creation is rate-limited per owner (20 requests / 15 minutes by default, both
+  configurable). A Redis outage fails the rate limiter **open** (creation is allowed
+  through) rather than blocking the product because an optimization is down — see the
+  trade-off comment in `apps/api/src/cache/creationRateLimiter.ts`.
+- Redis is never a single point of failure for a redirect: every cache read/write/delete
+  catches its own errors and falls back to PostgreSQL, and no cached value ever contains
+  an owner ID or other private field (only `linkId`, `shortCode`, `longUrl`, `expiresAt`,
+  `redirectStatusCode` — see `RedirectCachePayload`).
 
 Analytics-specific privacy behavior (IP hashing, GeoIP, retention) is documented in the
 [technical specification](docs/02-technical-specification.md) and
@@ -282,12 +320,13 @@ Analytics-specific privacy behavior (IP hashing, GeoIP, retention) is documented
 
 ## Known limitations (current state)
 
-- **No caching yet.** Every redirect and list query hits PostgreSQL directly. Redis
-  cache-aside is designed (see the technical spec) but not implemented.
 - **No click analytics captured yet.** Clicks are not recorded anywhere; `totalClicks`
   will always read `0` until the queue/worker pipeline is built.
-- **No rate limiting yet.** Link creation is not currently throttled.
 - **No dashboard UI.** Everything above is exercised through the JSON API only.
+- **Rate limiter is a fixed window, not a true sliding window.** A burst spanning two
+  windows could briefly exceed the configured limit. Documented and accepted as a
+  simplicity trade-off for an abuse control that only needs to be roughly right — see the
+  comment in `apps/api/src/cache/creationRateLimiter.ts`.
 - **Dependency audit:** `npm audit` reports vulnerabilities in `esbuild` (Vite/Vitest's
   dev-only dependency) and `glob` (a transitive dependency of `node-pg-migrate`'s CLI).
   Both are development-tooling-only exposure — neither ships in the deployed API/worker

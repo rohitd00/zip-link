@@ -1,28 +1,42 @@
+import type { Redis } from "ioredis";
 import type { Pool } from "pg";
 import request from "supertest";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { buildApiApp } from "./app";
 import { createTestDatabasePool, truncateAllTestData } from "./testSupport/testDatabasePool";
+import { clearTestCacheKeys, createTestRedisClient } from "./testSupport/testRedisClient";
 
 let pool: Pool;
+let redisClient: Redis;
 let app: ReturnType<typeof buildApiApp>;
 
 beforeAll(() => {
   pool = createTestDatabasePool();
+  redisClient = createTestRedisClient();
   app = buildApiApp({
     databasePool: pool,
+    redisClient,
     publicBaseUrl: "https://sho.rt",
     ownerCookieSecret: "test-owner-cookie-secret",
+    redirectCacheTtlSeconds: 86400,
+    // A generous limit here: this file exercises general API correctness,
+    // not rate limiting specifically (see creationRateLimiter.test.ts for
+    // that), so it must not fail because it happens to send more than a
+    // realistic number of creation requests for one owner.
+    createRateLimitMaxRequests: 1000,
+    createRateLimitWindowSeconds: 900,
     isProductionEnvironment: false,
   });
 });
 
 afterEach(async () => {
   await truncateAllTestData(pool);
+  await clearTestCacheKeys(redisClient);
 });
 
 afterAll(async () => {
   await pool.end();
+  await redisClient.quit();
 });
 
 /**
@@ -234,5 +248,94 @@ describe("GET /health/live and /health/ready", () => {
 
     expect(liveResponse.status).toBe(200);
     expect(readyResponse.status).toBe(200);
+    expect(readyResponse.body.dependencies.database).toBe("ok");
+    expect(readyResponse.body.dependencies.cache).toBe("ok");
+  });
+});
+
+describe("Redis cache-aside redirect behavior", () => {
+  it("populates the cache on creation and serves a redirect from it even if the database row is gone", async () => {
+    const createResponse = await request(app)
+      .post("/api/links")
+      .send({ longUrl: "https://example.com/cache-write-through" });
+
+    const shortCode = createResponse.body.data.shortCode as string;
+
+    const cachedValueAfterCreate = await redisClient.get(`redirect:link:${shortCode}`);
+    expect(cachedValueAfterCreate).not.toBeNull();
+
+    // Remove the row directly from PostgreSQL, bypassing the API. If the
+    // next redirect still succeeds, it can only have come from the cache.
+    await pool.query("DELETE FROM links WHERE short_code = $1", [shortCode]);
+
+    const redirectResponse = await request(app).get(`/${shortCode}`);
+    expect(redirectResponse.status).toBe(302);
+    expect(redirectResponse.headers.location).toBe("https://example.com/cache-write-through");
+  });
+
+  it("backfills the cache on a cache miss so the next request would be a hit", async () => {
+    const createResponse = await request(app)
+      .post("/api/links")
+      .send({ longUrl: "https://example.com/cache-miss-backfill" });
+
+    const shortCode = createResponse.body.data.shortCode as string;
+
+    // The link was just created, which already wrote it to the cache.
+    // Delete that cache entry so this test starts from a genuine miss.
+    await redisClient.del(`redirect:link:${shortCode}`);
+
+    const firstRedirectResponse = await request(app).get(`/${shortCode}`);
+    expect(firstRedirectResponse.status).toBe(302);
+
+    const cachedValueAfterMiss = await redisClient.get(`redirect:link:${shortCode}`);
+    expect(cachedValueAfterMiss).not.toBeNull();
+  });
+
+  it("never sets a cache TTL longer than the link's remaining lifetime", async () => {
+    const createResponse = await request(app)
+      .post("/api/links")
+      .send({
+        longUrl: "https://example.com/short-lived",
+        expiresAt: new Date(Date.now() + 5000).toISOString(),
+      });
+
+    const shortCode = createResponse.body.data.shortCode as string;
+    const cacheTtlSeconds = await redisClient.ttl(`redirect:link:${shortCode}`);
+
+    // The configured default TTL in these tests is 86400 seconds, so a TTL
+    // anywhere near that would mean the link's real expiry was ignored.
+    expect(cacheTtlSeconds).toBeGreaterThan(0);
+    expect(cacheTtlSeconds).toBeLessThanOrEqual(5);
+  });
+
+  it("treats a malformed cache entry as a miss and still redirects correctly", async () => {
+    const createResponse = await request(app)
+      .post("/api/links")
+      .send({ longUrl: "https://example.com/malformed-cache" });
+
+    const shortCode = createResponse.body.data.shortCode as string;
+
+    await redisClient.set(`redirect:link:${shortCode}`, "{ this is not valid JSON");
+
+    const redirectResponse = await request(app).get(`/${shortCode}`);
+    expect(redirectResponse.status).toBe(302);
+    expect(redirectResponse.headers.location).toBe("https://example.com/malformed-cache");
+  });
+
+  it("removes the cache entry when the owner deletes the link", async () => {
+    const { ownerCookie } = await createLinkAndCaptureOwnerCookie(
+      "https://example.com/owner-for-delete",
+    );
+    const createResponse = await request(app)
+      .post("/api/links")
+      .set("Cookie", ownerCookie)
+      .send({ longUrl: "https://example.com/cache-invalidate-on-delete" });
+
+    const shortCode = createResponse.body.data.shortCode as string;
+    expect(await redisClient.get(`redirect:link:${shortCode}`)).not.toBeNull();
+
+    await request(app).delete(`/api/links/${shortCode}`).set("Cookie", ownerCookie).expect(204);
+
+    expect(await redisClient.get(`redirect:link:${shortCode}`)).toBeNull();
   });
 });

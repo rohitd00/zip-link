@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { isPlausibleShortCodeShape } from "../domain/shortCodeShapeValidation";
+import { logger } from "../observability/logger";
 import type { RedirectService } from "../services/redirectService";
 import { renderLinkExpiredHtmlPage, renderLinkUnavailableHtmlPage } from "../views/publicErrorPage";
 
@@ -22,6 +23,15 @@ export class RedirectController {
     }
 
     const resolution = await this.redirectService.resolveShortCode(shortCode, new Date());
+
+    // This one log line is how the product metric "cache hit ratio" (see
+    // product-requirements-document.md Section 11) is measured: count
+    // requests by cacheResult and divide.
+    logger.info("Resolved a redirect request.", {
+      shortCode,
+      outcome: resolution.outcome,
+      cacheResult: resolution.cacheResult,
+    });
 
     if (resolution.outcome === "not_found") {
       this.sendNotFoundResponse(request, response);

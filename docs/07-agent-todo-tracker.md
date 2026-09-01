@@ -59,7 +59,7 @@ Update this summary first when task statuses change.
 | Project foundation | Done | Claude (agent) | None — complete. |
 | Database and domain contracts | Done | Claude (agent) | None — complete. |
 | Core link API and redirect | Done | Claude (agent) | None — complete (Redis/queue deliberately excluded, per Phase 2 scope). |
-| Redis cache and rate limiting | Not started | Unassigned | Core redirect baseline complete. |
+| Redis cache and rate limiting | Done | Claude (agent) | None — complete. |
 | Queue and analytics worker | Not started | Unassigned | Redis/cache foundation complete. |
 | Analytics API and rollups | Not started | Unassigned | Worker produces raw events. |
 | Dashboard UI | Not started | Unassigned | Stable API contracts available. |
@@ -138,17 +138,19 @@ Acceptance evidence:
 
 | Field | Detail |
 | --- | --- |
-| Status | Blocked |
+| Status | Done |
 | Priority | P0 |
 | Depends on | A-03 |
 | Deliverable | Docker Compose development services for PostgreSQL and Redis. |
 
-Blocker: Docker Desktop's daemon was not running/available in the development
-environment and enabling it was out of scope to do unattended. `docker-compose.yml` is
-written and matches the technical specification, but has not been started or verified.
-Local development instead used a native PostgreSQL 18 install with a dedicated
-least-privilege role and database (see README "Local setup"). Redis is not yet needed
-(first required in Phase 3/Workstream D) so this does not block Workstreams A-C.
+Note: Docker Desktop's daemon was initially unavailable in the development environment
+(resolved once the user started it — see completion log). `docker-compose.yml` defines
+both `postgres` and `redis` services and matches the technical specification; `redis` is
+what local development actually runs (`docker compose up -d redis`), verified via
+`redis-cli ping`. PostgreSQL stays native (see A-03/README) rather than switching to the
+compose `postgres` service, since the native instance was already set up and verified
+working — the compose `postgres` service remains available as a documented alternative
+but is not the path this project actually exercises.
 
 To-do:
 
@@ -373,7 +375,7 @@ Acceptance evidence:
 
 | Field | Detail |
 | --- | --- |
-| Status | Not started |
+| Status | Done |
 | Priority | P0 |
 | Depends on | A-04, C-04 |
 | Deliverable | Reusable Redis client/lifecycle integration. |
@@ -395,7 +397,7 @@ Acceptance evidence:
 
 | Field | Detail |
 | --- | --- |
-| Status | Not started |
+| Status | Done |
 | Priority | P0 |
 | Depends on | D-01 |
 | Deliverable | Cache-first redirect resolution with correct database fallback. |
@@ -422,7 +424,7 @@ Acceptance evidence:
 
 | Field | Detail |
 | --- | --- |
-| Status | Not started |
+| Status | Done |
 | Priority | P1 |
 | Depends on | D-01, C-03 |
 | Deliverable | Redis-backed per-owner/IP creation limit. |
@@ -885,5 +887,7 @@ Append real updates below; do not rewrite prior history.
 | 2026-09-02 | A-04 | Not started → Blocked | `docker-compose.yml` written for Postgres+Redis but unverified (Docker Desktop daemon unavailable). Used native PostgreSQL 18 with dedicated `url_shortener_app` role and `url_shortener_dev`/`url_shortener_test` databases instead. Does not block Workstreams A-C since Redis is not needed until Workstream D. | Claude (agent) |
 | 2026-09-02 | B-01, B-02, B-03, B-04 | Not started → Done | 6 migrations under `database/migrations/` create enums, `links`, partitioned `click_events` (current month + 2 ahead), `analytics_event_deduplication`, rollup tables, and rollup checkpoints — verified against both `url_shortener_dev` and `url_shortener_test` via `\dt`/`\d links`. `scripts/create-future-click-event-partitions.ts` implemented and manually verified idempotent. Shared contracts in `packages/shared/src/contracts/`. Base62 encoder/decoder (`packages/shared/src/base62/`) with 9 unit tests; URL/alias/expiry validation (`apps/api/src/domain/`) with 29 unit tests. No UUID/random-ID library used for code generation. | Claude (agent) |
 | 2026-09-02 | C-01 to C-04 | Not started → Done | Signed anonymous owner-context cookie middleware; `LinkRepository` (parameterized SQL only); `LinkService` (create/list/get/delete business rules, duplicate handling, custom alias vs. generated code); `POST`/`GET`/`GET :code`/`DELETE /api/links`; public `GET /:code` redirect (302/404/410) registered after all `/api` and `/health` routes. Verified via 27 integration tests (`apps/api/src/repositories/linkRepository.test.ts`, `apps/api/src/app.test.ts`) against the real `url_shortener_test` database, covering concurrent ID allocation, alias conflicts, cross-owner denial (404, not 403), expiry, and idempotent delete — plus a full manual curl walkthrough of create → duplicate → alias conflict → list → detail → delete → post-delete 404. All 65 tests pass; lint/typecheck clean. | Claude (agent) |
-| 2026-09-02 | D, E, F, G, H | — | Not started. Next up: Redis cache-aside redirect + rate limiting (Workstream D), per the dependency map in `06-implementation-plan.md`. | — |
+| 2026-09-02 | A-04 | Blocked → Done | User started Docker Desktop; its CLI was found at `%LOCALAPPDATA%\Programs\DockerDesktop\resources\bin\docker.exe` (not on `PATH`, not under the older `Program Files\Docker\Docker` location). Ran `docker compose up -d redis` successfully; `docker exec url-shortener-redis redis-cli ping` returned `PONG`. PostgreSQL remains native by choice (already working), not a limitation. | Claude (agent) |
+| 2026-09-02 | D-01, D-02, D-03 | Not started → Done | Redis client factory (`apps/api/src/cache/redisClient.ts`, 1s command timeout, 1 retry, so a stuck Redis can't hang a redirect). `RedirectCacheRepository`: validated reads (zod schema, malformed/wrong-shape/JSON-parse-failure all treated as miss), best-effort writes/deletes that never throw. `calculateRedirectCacheTtlSeconds` (pure function, 5 unit tests) bounds TTL to the smaller of the default and the link's remaining lifetime. `RedirectService` rewritten as true cache-aside: Redis read first, PostgreSQL fallback on miss/error, backfill on miss, cached-but-now-expired entries are bypassed and deleted rather than trusted. `LinkService` writes through the cache on creation and invalidates on delete. `CreationRateLimiter` (Redis INCR+EXPIRE fixed window, documented sliding-vs-fixed trade-off, fails open on Redis error) applied only to `POST /api/links` via route-scoped middleware — confirmed the public redirect route is never rate-limited. `HealthController` now reports PostgreSQL and Redis separately; only PostgreSQL failure returns 503. Verified with 24 new tests (unit: cache TTL, mocked-Redis error handling; integration: real Redis cache-aside via `app.test.ts` — including deleting the DB row directly and confirming the redirect still serves from cache — and real-Redis rate-limiter behavior including window reset) plus a full manual walkthrough (readiness shows both deps ok, cache payload inspected directly in Redis, 20-requests-then-429 confirmed live). Also fixed a pre-existing test-suite flake: multiple test files sharing one real Postgres/Redis test instance were running in parallel and racing each other's cleanup; set `fileParallelism: false` in `vitest.config.ts`. All 89 tests pass, 0 lint errors, clean typecheck. | Claude (agent) |
+| 2026-09-02 | E, F, G, H | — | Not started. Next up: BullMQ click-event queue + analytics worker (Workstream E), per the dependency map in `06-implementation-plan.md`. | — |
 

@@ -15,7 +15,9 @@ export interface ApiEnvironmentConfig {
   port: number;
   publicBaseUrl: string;
   databaseConnectionString: string;
+  redisConnectionString: string;
   ownerCookieSecret: string;
+  redirectCacheTtlSeconds: number;
   createRateLimitMaxRequests: number;
   createRateLimitWindowSeconds: number;
   logLevel: string;
@@ -91,9 +93,19 @@ export function loadApiEnvironmentConfig(): ApiEnvironmentConfig {
     "Set DATABASE_URL to a valid PostgreSQL connection string.",
   );
 
+  const redisConnectionString = readRequiredStringVariable(
+    "REDIS_URL",
+    "Set REDIS_URL to a valid Redis connection string, for example redis://127.0.0.1:6379.",
+  );
+
   const ownerCookieSecret = readRequiredStringVariable(
     "OWNER_COOKIE_SECRET",
     "Set OWNER_COOKIE_SECRET to a long random value used to sign the anonymous owner cookie.",
+  );
+
+  const redirectCacheTtlSeconds = readRequiredPositiveIntegerVariable(
+    "REDIRECT_CACHE_TTL_SECONDS",
+    "Set REDIRECT_CACHE_TTL_SECONDS to the default number of seconds a redirect cache entry should live.",
   );
 
   const createRateLimitMaxRequests = readRequiredPositiveIntegerVariable(
@@ -113,7 +125,9 @@ export function loadApiEnvironmentConfig(): ApiEnvironmentConfig {
     port,
     publicBaseUrl,
     databaseConnectionString,
+    redisConnectionString,
     ownerCookieSecret,
+    redirectCacheTtlSeconds,
     createRateLimitMaxRequests,
     createRateLimitWindowSeconds,
     logLevel,

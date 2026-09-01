@@ -10,8 +10,10 @@ import type {
   CreateLinkResponseData,
   ListLinksResponseData,
 } from "@shared/contracts/linkRequests";
+import type { RedirectCacheRepository } from "../cache/redirectCacheRepository";
 import { AliasUnavailableError, NotFoundError, ValidationError } from "../domain/applicationErrors";
 import { validateCustomAliasFormat } from "../domain/aliasValidation";
+import { calculateRedirectCacheTtlSeconds } from "../domain/cacheTtl";
 import { validateFutureExpiryTimestamp } from "../domain/expiryValidation";
 import { hasLinkReachedExpiry } from "../domain/linkState";
 import { validateAndNormalizeDestinationUrl } from "../domain/urlValidation";
@@ -32,7 +34,9 @@ export interface CreateLinkResult {
 export class LinkService {
   constructor(
     private readonly linkRepository: LinkRepository,
+    private readonly redirectCacheRepository: RedirectCacheRepository,
     private readonly publicBaseUrl: string,
+    private readonly defaultCacheTtlSeconds: number,
   ) {}
 
   async createLink(
@@ -67,6 +71,8 @@ export class LinkService {
         expiresAt,
       );
 
+      await this.cacheNewlyCreatedLink(createdLink, currentTime);
+
       return {
         data: mapLinkRecordToCreateResponse(createdLink, this.publicBaseUrl, false),
         wasExistingDuplicate: false,
@@ -79,10 +85,38 @@ export class LinkService {
       expiresAt,
     );
 
+    await this.cacheNewlyCreatedLink(createdLink, currentTime);
+
     return {
       data: mapLinkRecordToCreateResponse(createdLink, this.publicBaseUrl, false),
       wasExistingDuplicate: false,
     };
+  }
+
+  /**
+   * Populates the redirect cache immediately after a link is created, so
+   * the very first visitor does not need to wait for a cache-miss database
+   * lookup. This is best-effort: RedirectCacheRepository already swallows
+   * its own Redis errors, so a cache outage during creation cannot fail
+   * the creation request itself, matching Rule A-02.
+   */
+  private async cacheNewlyCreatedLink(link: LinkDatabaseRow, currentTime: Date): Promise<void> {
+    const ttlSeconds = calculateRedirectCacheTtlSeconds(
+      link.expiresAt,
+      currentTime,
+      this.defaultCacheTtlSeconds,
+    );
+
+    await this.redirectCacheRepository.setCachedRedirectLink(
+      {
+        linkId: link.id,
+        shortCode: link.shortCode,
+        longUrl: link.longUrl,
+        expiresAt: link.expiresAt === null ? null : link.expiresAt.toISOString(),
+        redirectStatusCode: link.redirectStatusCode,
+      },
+      ttlSeconds,
+    );
   }
 
   private async createLinkWithGeneratedCode(
@@ -186,6 +220,10 @@ export class LinkService {
     if (deletedLink === null) {
       throw new NotFoundError();
     }
+
+    // The database soft delete already committed and is authoritative; a
+    // failure invalidating the cache here does not undo it, per Rule A-02.
+    await this.redirectCacheRepository.deleteCachedRedirectLink(deletedLink.shortCode);
   }
 }
 

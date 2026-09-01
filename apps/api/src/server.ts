@@ -1,4 +1,5 @@
 import { buildApiApp } from "./app";
+import { createRedisClient } from "./cache/redisClient";
 import { loadApiEnvironmentConfig } from "./config/environment";
 import { logger } from "./observability/logger";
 import { createDatabasePool } from "./repositories/databasePool";
@@ -6,11 +7,16 @@ import { createDatabasePool } from "./repositories/databasePool";
 function startApiServer(): void {
   const config = loadApiEnvironmentConfig();
   const databasePool = createDatabasePool(config.databaseConnectionString);
+  const redisClient = createRedisClient(config.redisConnectionString);
 
   const app = buildApiApp({
     databasePool,
+    redisClient,
     publicBaseUrl: config.publicBaseUrl,
     ownerCookieSecret: config.ownerCookieSecret,
+    redirectCacheTtlSeconds: config.redirectCacheTtlSeconds,
+    createRateLimitMaxRequests: config.createRateLimitMaxRequests,
+    createRateLimitWindowSeconds: config.createRateLimitWindowSeconds,
     isProductionEnvironment: config.nodeEnvironment === "production",
   });
 
@@ -25,14 +31,23 @@ function startApiServer(): void {
     logger.info("Shutting down API server.", { signal: signalName });
 
     server.close(() => {
-      databasePool
-        .end()
-        .then(() => {
+      Promise.allSettled([databasePool.end(), redisClient.quit()])
+        .then((results) => {
+          const failure = results.find((result) => result.status === "rejected");
+
+          if (failure !== undefined && failure.status === "rejected") {
+            logger.error("Error while closing a dependency connection during shutdown.", {
+              message: failure.reason instanceof Error ? failure.reason.message : "Unknown error",
+            });
+            process.exit(1);
+            return;
+          }
+
           logger.info("API server shutdown complete.");
           process.exit(0);
         })
         .catch((shutdownError: unknown) => {
-          logger.error("Error while closing the database pool during shutdown.", {
+          logger.error("Unexpected error during shutdown.", {
             message: shutdownError instanceof Error ? shutdownError.message : "Unknown error",
           });
           process.exit(1);
