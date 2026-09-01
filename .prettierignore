@@ -1,0 +1,8 @@
+node_modules
+dist
+build
+coverage
+package-lock.json
+
+# Pre-existing specification documents; not reformatted by this project's tooling.
+docs/
