@@ -5,14 +5,12 @@ analytics must never slow them down.** Redirect resolution is a cache-first, low
 read path. Click analytics are captured asynchronously through a queue and processed by a
 separate worker, so a slow database write or GeoIP lookup can never delay a visitor.
 
-> **Project status:** Phases 0–5 of the implementation plan are complete: repository
-> foundation, database schema, a fully working database-backed link
-> create/list/detail/delete/redirect flow, Redis cache-aside redirects, Redis-backed
-> creation rate limiting, an asynchronous BullMQ click-analytics queue with a separate
-> enrichment worker, and an owner-authorized analytics query API (totals, timeline,
-> referrer/device/browser/geography breakdowns, privacy-thresholded city display). Only
-> the React dashboard and rollups remain — see [Implementation status](#implementation-status)
-> below.
+> **Project status:** Phases 0–6 of the implementation plan are complete: the full backend
+> (link CRUD, cache-aside redirects, rate limiting, the BullMQ analytics pipeline, the
+> analytics query API) plus a minimalist React/Tailwind dashboard — create a link, watch
+> it appear in the list, open its analytics (live chart, breakdowns, accessible table
+> alternative), and delete it with confirmation. Only rollups and production hardening
+> remain — see [Implementation status](#implementation-status) below.
 
 Full product/technical documentation lives in [`docs/`](docs/):
 [PRD](docs/01-prd.md) · [Technical specification](docs/02-technical-specification.md) ·
@@ -61,35 +59,35 @@ Full product/technical documentation lives in [`docs/`](docs/):
 ```
 
 Today, every portion of this diagram exists and runs — the API, PostgreSQL, Redis (cache,
-rate limiter, and BullMQ), and the analytics worker, plus an analytics query API reading
-back what the worker stored. Only the React dashboard and rollups remain unbuilt.
+rate limiter, and BullMQ), the analytics worker, the analytics query API, and the React
+dashboard shown above it.
 
 ## Implementation status
 
-| Area                                                                                    | Status                                                                                                                               |
-| --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| Repository layout, TypeScript, lint/format/test tooling                                 | Done                                                                                                                                 |
-| Database migrations (`links`, partitioned `click_events`, dedupe, rollups, checkpoints) | Done                                                                                                                                 |
-| Base62 short-code encoder/decoder                                                       | Done                                                                                                                                 |
-| URL validation/normalization, alias validation, expiry validation                       | Done                                                                                                                                 |
-| Owner-context (anonymous signed cookie)                                                 | Done                                                                                                                                 |
-| Link create / list / get / delete (PostgreSQL only)                                     | Done                                                                                                                                 |
-| Public redirect (`GET /:code`), 404/410 pages                                           | Done                                                                                                                                 |
-| Health checks (`/health/live`, `/health/ready`)                                         | Done — reports PostgreSQL and Redis status separately                                                                                |
-| Redis cache-aside redirect (read-through + write-through, TTL bounded by expiry)        | Done                                                                                                                                 |
-| Redis-backed creation rate limiting (fail-open on Redis outage)                         | Done                                                                                                                                 |
-| BullMQ click-event queue (producer, on the redirect path)                               | Done — bounded 500ms publish budget; a queue failure never fails the redirect                                                        |
-| Analytics worker (UA parsing, offline GeoIP, HMAC IP hashing, idempotent insert)        | Done                                                                                                                                 |
-| Analytics query API (totals, timeline, referrer/device/browser/geography breakdowns)    | Done — reads raw `click_events` directly (see rollups row below)                                                                     |
-| Rollups (`click_rollups_*` tables, scheduler)                                           | Not started — tables exist from the schema migration but nothing populates them yet                                                  |
-| React/Tailwind dashboard                                                                | Not started                                                                                                                          |
-| Docker images for API/worker/web, full container journey                                | `docker-compose.yml` starts Postgres+Redis and is actually used for Redis in local dev (see below); API/worker not yet containerized |
-| Load benchmarking                                                                       | Not started                                                                                                                          |
+| Area                                                                                    | Status                                                                                                                                   |
+| --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Repository layout, TypeScript, lint/format/test tooling                                 | Done                                                                                                                                     |
+| Database migrations (`links`, partitioned `click_events`, dedupe, rollups, checkpoints) | Done                                                                                                                                     |
+| Base62 short-code encoder/decoder                                                       | Done                                                                                                                                     |
+| URL validation/normalization, alias validation, expiry validation                       | Done                                                                                                                                     |
+| Owner-context (anonymous signed cookie)                                                 | Done                                                                                                                                     |
+| Link create / list / get / delete (PostgreSQL only)                                     | Done                                                                                                                                     |
+| Public redirect (`GET /:code`), 404/410 pages                                           | Done                                                                                                                                     |
+| Health checks (`/health/live`, `/health/ready`)                                         | Done — reports PostgreSQL and Redis status separately                                                                                    |
+| Redis cache-aside redirect (read-through + write-through, TTL bounded by expiry)        | Done                                                                                                                                     |
+| Redis-backed creation rate limiting (fail-open on Redis outage)                         | Done                                                                                                                                     |
+| BullMQ click-event queue (producer, on the redirect path)                               | Done — bounded 500ms publish budget; a queue failure never fails the redirect                                                            |
+| Analytics worker (UA parsing, offline GeoIP, HMAC IP hashing, idempotent insert)        | Done                                                                                                                                     |
+| Analytics query API (totals, timeline, referrer/device/browser/geography breakdowns)    | Done — reads raw `click_events` directly (see rollups row below)                                                                         |
+| React/Tailwind dashboard (create, list/search, link detail + live chart, delete)        | Done — verified live in a real browser, including the full create → click → chart flow                                                   |
+| Rollups (`click_rollups_*` tables, scheduler)                                           | Not started — tables exist from the schema migration but nothing populates them yet                                                      |
+| Docker images for API/worker/web, full container journey                                | `docker-compose.yml` starts Postgres+Redis and is actually used for Redis in local dev (see below); API/worker/web not yet containerized |
+| Load benchmarking                                                                       | Not started                                                                                                                              |
 
 This matches the "foundation first" phased approach in
-[the implementation plan](docs/06-implementation-plan.md): Phases 0–5 are complete —
-clicks are captured, enriched, durably stored, and queryable by their owner, without ever
-slowing down a redirect. Dashboard, hardening, and benchmarks come next.
+[the implementation plan](docs/06-implementation-plan.md): Phases 0–6 are complete — the
+full create → redirect → analyze → delete journey works end to end, through a real
+browser, without ever slowing down a redirect. Hardening and benchmarks come next.
 
 ## Tech stack
 
@@ -119,8 +117,20 @@ slowing down a redirect. Dashboard, hardening, and benchmarks come next.
   round trip through a real queue. Test files run sequentially (not in parallel) — see
   the comment in `vitest.config.ts` for why. `REDIS_TEST_URL` points at a separate
   logical Redis database from `REDIS_URL`, so running tests never touches a locally
-  running dev server's cache, rate limits, or queued jobs.
-- **Linting/formatting:** ESLint (flat config) + Prettier.
+  running dev server's cache, rate limits, or queued jobs. Dashboard component tests use
+  [Testing Library](https://testing-library.com/) + jsdom (opted into per file with a
+  `// @vitest-environment jsdom` comment, since most of this project's tests are backend
+  tests that should stay in the faster default `node` environment).
+- **Linting/formatting:** ESLint (flat config, with `eslint-plugin-react-hooks` for the
+  dashboard) + Prettier.
+- **Dashboard (`apps/web`):** React 19 + [Vite](https://vite.dev/) +
+  [React Router](https://reactrouter.com/) + [Tailwind CSS v4](https://tailwindcss.com/)
+  (CSS-native `@theme` tokens, no separate JS config file — see
+  `apps/web/src/styles/global.css`) + [Recharts](https://recharts.org/) for the clicks
+  chart. No global state library: each page manages its own data with a small custom hook
+  (`useLinkList`, `useLinkAnalytics`) calling a typed `apiClient` module, per the design
+  spec's "do not introduce a global state library unless concrete interaction complexity
+  proves it necessary."
 
 ### A note on the repository layout
 
@@ -134,6 +144,11 @@ setting wasn't something to do without asking. Instead there is a single root
 through a TypeScript path alias (`@shared/*` → `packages/shared/src/*`), resolved at
 runtime by [`tsx`](https://github.com/privatenumber/tsx). Functionally this behaves the
 same as a workspace for this project's needs, with one less moving part.
+
+`apps/web`'s Vite config is named `vite.config.mts`, not `.ts`: because the root
+`package.json` has no `"type": "module"`, Vite would otherwise try to load the config as
+CommonJS, which fails for the (ESM-only) `@tailwindcss/vite` plugin. The `.mts` extension
+tells Vite to load that one file as ESM regardless of the package's own module type.
 
 ## Local setup
 
@@ -251,6 +266,20 @@ psql -U url_shortener_app -d url_shortener_dev \
 ```
 
 Note that `ip_hash` is a hex digest, never the visitor's actual IP address.
+
+### 7. Run the dashboard
+
+In a third terminal:
+
+```bash
+npm run dev:web
+```
+
+Open **http://localhost:5173** (not port 3000 — that's the API). The dev server proxies
+`/api` and `/health` requests to `http://localhost:3000`, so the browser only ever talks
+to one origin and the owner-context cookie works normally. Create a link, click into it,
+and its analytics page will show the same data you'd get from `curl`ing the analytics API
+directly — including a live chart, once the worker (step 6) has processed a click or two.
 
 ### Using Docker for PostgreSQL too
 
@@ -414,8 +443,16 @@ as an actual cleanup job — see [Implementation status](#implementation-status)
 
 ## Known limitations (current state)
 
-- **No dashboard UI yet.** The analytics query API is done and verified, but there is no
-  web interface for it — everything is exercised through the JSON API only.
+- **Dashboard is not containerized or production-built yet.** It runs via `npm run
+dev:web` (Vite dev server); `npm run build:web` produces a static `apps/web/dist`
+  bundle, but nothing serves it in production yet (no Dockerfile, no static-file serving
+  wired into the API). The bundle is also not code-split — Recharts pushes it past Vite's
+  default 500KB warning threshold; acceptable for a project this size, worth splitting if
+  the dashboard grows.
+- **No public 404/410 pages in the React app.** They don't need to exist there: a bad
+  short code never reaches the SPA at all — the API renders the (already-implemented,
+  already-tested) HTML error page directly for `GET /:code`, per Rule G-04's status as
+  handled by Phase 2, not Phase 6.
 - **No rollups yet.** `click_rollups_*` tables exist but nothing populates them; the
   analytics API queries raw `click_events` directly for every request. This is correct
   for the traffic volumes this project has actually been tested at, but a link with a

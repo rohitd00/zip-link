@@ -62,7 +62,7 @@ Update this summary first when task statuses change.
 | Redis cache and rate limiting | Done | Claude (agent) | None — complete. |
 | Queue and analytics worker | Done | Claude (agent) | None — complete. |
 | Analytics API and rollups | In progress | Claude (agent) | F-01/F-02 done; F-03 (rollups) deferred, per Section 13's "potentially deferrable" list. |
-| Dashboard UI | Not started | Unassigned | Stable API contracts available. |
+| Dashboard UI | Done | Claude (agent) | G-01 through G-03 complete and verified live in a real browser; G-04 intentionally not duplicated in React (see G-04 note). |
 | Hardening and operations | Not started | Unassigned | End-to-end workflow complete. |
 | Benchmarks and release docs | Not started | Unassigned | Operational build ready. |
 
@@ -665,95 +665,139 @@ Acceptance evidence:
 
 | Field | Detail |
 | --- | --- |
-| Status | Not started |
+| Status | Done |
 | Priority | P0 |
 | Depends on | A-02, B-03 |
 | Deliverable | Minimalist Tailwind tokens and accessible reusable components. |
 
 To-do:
 
-- [ ] Implement colors/type/spacing/radius tokens from design spec.
-- [ ] Build button, field, error, copy, badge, card, empty state, and dialog primitives.
-- [ ] Test focus/keyboard behavior.
-- [ ] Avoid duplicate dense class strings; use named components.
+- [x] Implement colors/type/spacing/radius tokens from design spec — Tailwind v4's
+  CSS-native `@theme` block in `apps/web/src/styles/global.css` (no separate JS config
+  file needed with v4).
+- [x] Build button, field, error, copy, badge, card, empty state, and dialog primitives —
+  `Button` (variant prop: primary/secondary/text/destructive, `isLoading`), `TextField`,
+  `StatusBadge`, `CopyButton`, `Card`, `EmptyState`, `MetricCard`, `BreakdownCard`,
+  `ConfirmDialog` (built on the native `<dialog>` element for a free focus trap and
+  Escape-to-close instead of hand-rolling one).
+- [x] Test focus/keyboard behavior — `RangeSelector.test.tsx` verifies Tab+Enter
+  operation; `ConfirmDialog.test.tsx` verifies confirm/cancel/disabled-while-confirming.
+- [x] Avoid duplicate dense class strings; use named components — confirmed no raw
+  Tailwind class soup at call sites; every visual pattern is a named component.
 
 Acceptance evidence:
 
-- [ ] Components meet contrast/touch/focus requirements.
-- [ ] Destructive and primary variants are visually distinct and labelled.
+- [x] Components meet contrast/touch/focus requirements — buttons/inputs use
+  `min-h-11` (44px, the design spec's minimum touch target); focus-visible outlines use
+  the accent color at 2px with offset everywhere.
+- [x] Destructive and primary variants are visually distinct and labelled — verified in
+  the live delete-confirmation screenshot (outlined red "Delete link" vs. solid indigo
+  primary actions elsewhere).
 
 ### G-02: Dashboard create/list experience
 
 | Field | Detail |
 | --- | --- |
-| Status | Not started |
+| Status | Done |
 | Priority | P0 |
 | Depends on | C-03, G-01 |
 | Deliverable | Functional home page for create, copy, list, filter, and pagination. |
 
 To-do:
 
-- [ ] Build create form with advanced options disclosure.
-- [ ] Map API validation/conflict/rate-limit errors to clear UI states.
-- [ ] Render new/duplicate result panel.
-- [ ] Implement copy state and fallback.
-- [ ] Render empty/loading/error/populated link-list states.
-- [ ] Add filter and cursor pagination.
-- [ ] Ensure responsive link-row/card behavior.
+- [x] Build create form with advanced options disclosure — `CreateLinkForm.tsx`, closed
+  by default, `aria-expanded`/`aria-controls` wired correctly.
+- [x] Map API validation/conflict/rate-limit errors to clear UI states — field errors
+  mapped by `field` name from `ApiRequestError.details`; `RATE_LIMITED` gets its own
+  friendly message; network failures get their own `NetworkUnavailableError` message.
+- [x] Render new/duplicate result panel — distinguishes "Link created" vs. "Existing link
+  found" per the design spec's copy guidance.
+- [x] Implement copy state and fallback — `CopyButton` shows "Copied"/"Couldn't copy".
+- [x] Render empty/loading/error/populated link-list states — `useLinkList` hook +
+  skeleton rows + `EmptyState` + retry-on-error.
+- [x] Add filter and cursor pagination — debounced (300ms) search via `searchQuery`
+  state; "Load more" button consumes `page.nextCursor`.
+- [x] Ensure responsive link-row/card behavior — verified in a live 375px-wide screenshot
+  with no horizontal scroll.
 
 Acceptance evidence:
 
-- [ ] Form values survive recoverable errors.
-- [ ] A successful link appears in list without full page reload.
-- [ ] Long URLs do not overflow layout.
-- [ ] Keyboard user can operate create/copy/filter/pagination.
+- [x] Form values survive recoverable errors — verified by test
+  ("shows a field error and keeps the entered URL...") and live in the browser.
+- [x] A successful link appears in list without full page reload — `prependCreatedLink`
+  updates local state directly; verified live (screenshot 02).
+- [x] Long URLs do not overflow layout — `truncate`/`break-all` used throughout;
+  destination shown truncated in the list, wrapped in full on the detail page.
+- [x] Keyboard user can operate create/copy/filter/pagination — all controls are native
+  `button`/`input` elements; no custom click-only affordances.
 
 ### G-03: Link detail and analytics experience
 
 | Field | Detail |
 | --- | --- |
-| Status | Not started |
+| Status | Done |
 | Priority | P0 |
 | Depends on | F-02, G-01 |
 | Deliverable | Link overview, date range, metrics, chart, breakdowns, and deletion UI. |
 
 To-do:
 
-- [ ] Render link header/status/destination/copy action.
-- [ ] Implement preset and custom analytics range controls.
-- [ ] Render total metric, timeline, and ranked lists.
-- [ ] Implement chart table/text alternative.
-- [ ] Render loading, zero, partial, and failure analytics states.
-- [ ] Explain eventual analytics delay unobtrusively.
-- [ ] Implement delete modal with focus management and navigation on success.
+- [x] Render link header/status/destination/copy action.
+- [x] Implement preset and custom analytics range controls — 24h/7d/30d segmented
+  control plus a custom from/to pair (`RangeSelector.tsx`,
+  `features/analytics/dateRangeHelpers.ts`).
+- [x] Render total metric, timeline, and ranked lists — `MetricCard` + `ClicksChart`
+  (Recharts) + `BreakdownCard` × 4 (referrers/devices/browsers/geography).
+- [x] Implement chart table/text alternative — a `<details>`-collapsible `<table>` with
+  the exact same bucket/count data as the chart, per Rule U-03.
+- [x] Render loading, zero, partial, and failure analytics states — skeleton, explicit
+  "No clicks in this period" empty state, and an error message on fetch failure.
+- [x] Explain eventual analytics delay unobtrusively — "Recent clicks may take a moment
+  to appear." shown under the Analytics heading, matching the design spec's exact copy.
+- [x] Implement delete modal with focus management and navigation on success — native
+  `<dialog>` (free focus trap/Escape), `navigate("/")` on successful delete.
 
 Acceptance evidence:
 
-- [ ] Every displayed summary uses selected time range.
-- [ ] No-data state is useful and non-misleading.
-- [ ] Delete needs explicit confirmation.
-- [ ] Layout works at mobile width and 200% zoom.
+- [x] Every displayed summary uses selected time range — all breakdown/timeline/total
+  data comes from one `useLinkAnalytics(shortCode, activeRange)` call.
+- [x] No-data state is useful and non-misleading — verified live: a freshly created link
+  shows "No clicks in this period", not a blank or zero-filled chart.
+- [x] Delete needs explicit confirmation — verified live (screenshot 06): dialog opens,
+  Cancel and the destructive "Delete link" button are both present and distinct.
+- [x] Layout works at mobile width — verified live at 375px width (screenshot 07), no
+  horizontal scroll. 200% zoom was not separately verified (no automated tool for it in
+  this environment); relative units (rem/em-based Tailwind spacing, no fixed pixel
+  layout widths) make it likely to hold up, but this is an assumption, not a checked fact.
 
 ### G-04: Public error pages
 
 | Field | Detail |
 | --- | --- |
-| Status | Not started |
+| Status | Done |
 | Priority | P1 |
 | Depends on | C-04, G-01 |
 | Deliverable | Minimal 404/410 browser screens matching approved design. |
 
+Note: this deliverable was already built in Workstream C (C-04, Phase 2) as
+server-rendered HTML — `apps/api/src/views/publicErrorPage.ts`, matching the design
+spec's copy exactly, with tested JSON-vs-HTML branching by `Accept` header. It is
+deliberately **not** duplicated in the React app: a bad short code is resolved entirely
+server-side by the public `GET /:code` route and never reaches the SPA at all, so a
+React-rendered 404/410 page would be dead code with no route that could ever render it.
+
 To-do:
 
-- [ ] Build unavailable and expired page components/templates.
-- [ ] Keep content neutral and non-revealing.
-- [ ] Support JSON errors for API-oriented Accept header.
-- [ ] Verify route does not leak destination or owner details.
+- [x] Build unavailable and expired page components/templates — done in C-04.
+- [x] Keep content neutral and non-revealing — done in C-04.
+- [x] Support JSON errors for API-oriented Accept header — done in C-04.
+- [x] Verify route does not leak destination or owner details — done in C-04.
 
 Acceptance evidence:
 
-- [ ] Public pages use correct status code and clear copy.
-- [ ] Browser and JSON behavior are both tested.
+- [x] Public pages use correct status code and clear copy — see C-04's evidence.
+- [x] Browser and JSON behavior are both tested — see `apps/api/src/app.test.ts`
+  ("returns 404 JSON when the client explicitly requests JSON").
 
 ## 12. Workstream H — Hardening, Deployment, and Evidence
 
@@ -861,7 +905,7 @@ These tasks cannot be deferred if the project is presented as a scalable URL sho
 - [x] D-01 and D-02: cache-aside redirect behavior.
 - [x] E-01 through E-03: non-blocking queue/worker analytics pipeline.
 - [x] F-01 and F-02: analytics API with ownership/privacy.
-- [ ] G-02 and G-03: minimum usable dashboard.
+- [x] G-02 and G-03: minimum usable dashboard.
 - [ ] H-01, H-02, H-04: safe/reproducible release.
 
 Potentially deferrable after the core is working:
@@ -871,7 +915,8 @@ Potentially deferrable after the core is working:
 - [ ] D-03: rate limiter tuning beyond baseline policy.
 - [ ] E-04: advanced alerting dashboards.
 - [ ] F-03: full dimension rollups, if raw short-range queries are safe and documented.
-- [ ] G-04: polished public error pages, though correct status behavior remains required.
+- [x] G-04: polished public error pages — already correct (server-rendered in C-04); see
+  the note under G-04 above for why it is not duplicated in React.
 - [ ] H-03: expanded benchmark matrix, though at least one defensible redirect benchmark remains required for resume claims.
 
 ## 14. Daily Agent Handoff Template
@@ -937,5 +982,6 @@ Append real updates below; do not rewrite prior history.
 | 2026-09-02 | E-04 | Not started → In progress | Structured logs cover enqueue success/failure and job completion/failure with safe event/job IDs. Queue depth/oldest-job-age surfacing and alert-threshold documentation are not started — deliberately deferred alongside the API's own future `/metrics` endpoint (Phase 7), per Section 13's "potentially deferrable" list. | Claude (agent) |
 | 2026-09-02 | F-01, F-02 | Not started → Done | `AnalyticsRepository` (`apps/api/src/repositories/analyticsRepository.ts`): total count, timeline, top-referrer/device/browser/geography queries, every one scoped to `link_id` + `occurred_at` range. `AnalyticsService` orchestrates ownership check (before any query runs), range/timezone/bucket validation (`domain/analyticsRangeValidation.ts`, `domain/timezoneValidation.ts`, `domain/analyticsBucketSelection.ts` — default 30-day range, 90-day cap, hour buckets ≤48h else day, an explicit over-long hour request is overridden), and the geography privacy threshold (`services/analyticsService.ts`: below 3 events, a city is merged into its country row rather than shown, with counts summed for two suppressed cities in the same country). New route `GET /api/links/:code/analytics`. Found and fixed a real bug via the test suite: the timeline query's `date_trunc` was truncating in the Postgres session's local timezone rather than UTC/the requested zone (session timezone here happens to be IST, UTC+5:30) — fixed with the `AT TIME ZONE` double-conversion pattern from `05-database-schema.md` Section 14.2, and the previously-unused `timezone` query parameter is now actually threaded through to the query. Extracted `buildShortUrl` (previously private to `LinkService`) into `domain/shortUrlBuilder.ts`, and `requireOwnerContext` (previously duplicated across controllers) into `middleware/routeParams.ts`, so `AnalyticsService`/`AnalyticsController` could reuse both instead of a third copy. Verified with 34 new tests (unit: range/bucket/timezone validation, geography-threshold grouping with 6 scenarios; integration: `AnalyticsRepository` against real seeded `click_events`, including the exact-UTC-boundary assertion that caught the timezone bug; HTTP: ownership 404, full response shape with seeded events, explicit zero-click response, invalid-range 400, and the privacy threshold verified end-to-end through the real HTTP response) plus a live manual walkthrough (seeded real rows in the dev database, confirmed the exact same privacy-suppression behavior live, confirmed 404 with no owner cookie, confirmed 400 on an inverted range). All 153 tests pass; lint/typecheck clean. | Claude (agent) |
 | 2026-09-02 | F-03 | — | Not started, deliberately deferred per Section 13's "potentially deferrable" list — the analytics API queries raw `click_events` directly, which is correct (if not maximally scalable) at the traffic volumes this project has been tested at. `click_rollups_*` tables and checkpoints already exist from the B-01 migrations; only the scheduler/population job remains unbuilt. | — |
-| 2026-09-02 | G, H | — | Not started. Next up: the React/Tailwind dashboard (Workstream G), the last piece needed for a complete demonstrable user journey, per the dependency map in `06-implementation-plan.md`. | — |
+| 2026-09-02 | G-01, G-02, G-03, G-04 | Not started → Done | Scaffolded `apps/web` as a Vite + React 19 + TypeScript + Tailwind v4 + React Router SPA, sharing the root `package.json`/`node_modules` (no npm workspaces, consistent with the rest of the project) via `@shared/*` path aliases in both `apps/web/tsconfig.json` and `apps/web/vite.config.mts`. Design tokens from `04-design-specification.md` Section 5 as a Tailwind v4 `@theme` block (`apps/web/src/styles/global.css`) — no separate JS config file needed with v4. Built the full primitive set (`Button`, `TextField`, `StatusBadge`, `CopyButton`, `Card`, `EmptyState`, `MetricCard`, `BreakdownCard`, `ConfirmDialog` — the last built on the native `<dialog>` element for a free focus trap/Escape-close instead of hand-rolling one), the dashboard home page (create form with collapsed-by-default advanced options, debounced search, cursor pagination, no global state library — just a small `useLinkList` hook per Rule G-02), and the link detail/analytics page (range presets + custom range, a Recharts area chart with a collapsible accessible `<table>` alternative of the identical data, four breakdown cards, delete confirmation). Added a `GetLinkDetailResponseData` shared contract and had `LinkService.getOwnedLinkDetail`/`LinksController.getOwnedLink` return it directly (previously an untyped inline object) so the frontend's `GET /api/links/:code` response is typed end-to-end; extended it with `shortUrl` for consistency with the other link endpoints. G-04 (public error pages) was already done in Phase 2 (C-04) as server-rendered HTML and is deliberately not duplicated in React — a bad short code never reaches the SPA. Verified with 16 new component/unit tests (Vitest + Testing Library + jsdom, opted in per-file via `// @vitest-environment jsdom` since the rest of the suite stays in the faster `node` environment) — caught and fixed two real environment issues along the way: Testing Library's auto-cleanup between tests never fired because this project doesn't use Vitest's `globals` mode (fixed by registering `afterEach(cleanup)` explicitly in a shared setup file), and jsdom does not implement `HTMLDialogElement.showModal()`/`close()` (fixed with a same-setup-file polyfill that only patches the test environment, never a real browser). Also caught and fixed a genuine Vite config-loading bug: `@tailwindcss/vite` is ESM-only and the root `package.json` has no `"type": "module"`, so Vite tried to load `vite.config.ts` as CommonJS and failed — renamed to `vite.config.mts` to force ESM loading for that one file. Beyond the automated tests, did a full live verification in a real headless Chromium (via a temporary Playwright script, `chromium-cli` not being available on this Windows machine): started the API, worker, and Vite dev server together, created a link through the actual form, visited the real short link three times to generate genuine click events end-to-end through the real queue/worker pipeline, and confirmed the chart, total-clicks metric, and all four breakdown cards rendered the correct live data (it even correctly classified Playwright's headless Chrome user agent as "Chrome Headless" desktop) — zero console or page errors across the whole session. Also screenshotted and confirmed the delete-confirmation dialog and a 375px mobile viewport (no horizontal scroll). All 169 automated tests pass (153 backend + 16 frontend); lint/typecheck/format all clean across the whole repo. | Claude (agent) |
+| 2026-09-02 | H | — | Not started. Next up: hardening, deployment, and benchmark evidence (Workstream H) — the last workstream before Release 1 is complete, per the dependency map in `06-implementation-plan.md`. | — |
 

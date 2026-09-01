@@ -43,3 +43,14 @@ export interface ListLinksQueryOptions {
   limit: number;
   query: string | null;
 }
+
+// This is the JSON body returned by GET /api/links/:code, matching
+// Section 11.3 of the technical specification.
+export interface GetLinkDetailResponseData {
+  shortCode: string;
+  shortUrl: string;
+  longUrl: string;
+  createdAt: string;
+  expiresAt: string | null;
+  totalClicks: number;
+}

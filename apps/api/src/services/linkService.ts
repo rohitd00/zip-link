@@ -8,6 +8,7 @@ import type { LinkDatabaseRow } from "@shared/contracts/link";
 import type {
   CreateLinkRequestBody,
   CreateLinkResponseData,
+  GetLinkDetailResponseData,
   ListLinksResponseData,
 } from "@shared/contracts/linkRequests";
 import type { RedirectCacheRepository } from "../cache/redirectCacheRepository";
@@ -203,7 +204,7 @@ export class LinkService {
   async getOwnedLinkDetail(
     ownerContext: OwnerContext,
     shortCode: string,
-  ): Promise<{ link: LinkDatabaseRow; totalClicks: number }> {
+  ): Promise<GetLinkDetailResponseData> {
     const link = await this.linkRepository.findOwnedLinkByShortCode(ownerContext, shortCode);
 
     if (link === null) {
@@ -212,7 +213,14 @@ export class LinkService {
 
     const totalClicks = await this.linkRepository.countClicksForLink(link.id);
 
-    return { link, totalClicks };
+    return {
+      shortCode: link.shortCode,
+      shortUrl: buildShortUrl(this.publicBaseUrl, link.shortCode),
+      longUrl: link.longUrl,
+      createdAt: link.createdAt.toISOString(),
+      expiresAt: link.expiresAt === null ? null : link.expiresAt.toISOString(),
+      totalClicks,
+    };
   }
 
   async deleteOwnedLink(ownerContext: OwnerContext, shortCode: string): Promise<void> {

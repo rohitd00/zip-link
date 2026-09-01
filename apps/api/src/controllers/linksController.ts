@@ -37,20 +37,9 @@ export class LinksController {
     const ownerContext = requireOwnerContext(request);
     const shortCode = getRequiredRouteParam(request, "code");
 
-    const { link, totalClicks } = await this.linkService.getOwnedLinkDetail(
-      ownerContext,
-      shortCode,
-    );
+    const linkDetail = await this.linkService.getOwnedLinkDetail(ownerContext, shortCode);
 
-    response.status(200).json({
-      data: {
-        shortCode: link.shortCode,
-        longUrl: link.longUrl,
-        createdAt: link.createdAt.toISOString(),
-        expiresAt: link.expiresAt === null ? null : link.expiresAt.toISOString(),
-        totalClicks,
-      },
-    });
+    response.status(200).json({ data: linkDetail });
   }
 
   async deleteLink(request: Request, response: Response): Promise<void> {
