@@ -16,6 +16,7 @@ import { validateCustomAliasFormat } from "../domain/aliasValidation";
 import { calculateRedirectCacheTtlSeconds } from "../domain/cacheTtl";
 import { validateFutureExpiryTimestamp } from "../domain/expiryValidation";
 import { hasLinkReachedExpiry } from "../domain/linkState";
+import { buildShortUrl } from "../domain/shortUrlBuilder";
 import { validateAndNormalizeDestinationUrl } from "../domain/urlValidation";
 import type { LinkRepository } from "../repositories/linkRepository";
 
@@ -288,14 +289,6 @@ function decodeListCursor(rawCursor: string | null): ListCursor | null {
       { field: "cursor", message: "Start a new list request without a cursor." },
     ]);
   }
-}
-
-function buildShortUrl(publicBaseUrl: string, shortCode: string): string {
-  const baseUrlWithoutTrailingSlash = publicBaseUrl.endsWith("/")
-    ? publicBaseUrl.slice(0, -1)
-    : publicBaseUrl;
-
-  return `${baseUrlWithoutTrailingSlash}/${shortCode}`;
 }
 
 function mapLinkRecordToCreateResponse(

@@ -7,8 +7,19 @@ export const MAX_CUSTOM_ALIAS_LENGTH_CHARACTERS = 64;
 export const MAX_REFERRER_STORED_LENGTH_CHARACTERS = 2048;
 export const MAX_USER_AGENT_INPUT_LENGTH_CHARACTERS = 1024;
 export const MAX_ANALYTICS_QUERY_RANGE_DAYS = 90;
+export const DEFAULT_ANALYTICS_QUERY_RANGE_DAYS = 30;
 export const MAX_LINK_LIST_PAGE_SIZE = 100;
 export const DEFAULT_LINK_LIST_PAGE_SIZE = 25;
+
+// Below this many events, a city is not shown on its own — it is grouped
+// into its country instead. This is a privacy threshold (Rule P-04), not a
+// display-space limit: a handful of clicks from one named city could
+// otherwise identify a specific small group of visitors.
+export const MIN_CITY_EVENT_COUNT_FOR_DISPLAY = 3;
+
+// A range this long or shorter uses hour buckets by default; anything
+// longer uses day buckets, matching Section 12.4 of app-flow.md.
+export const HOURLY_BUCKET_MAX_RANGE_HOURS = 48;
 
 // A custom alias may only contain letters, numbers, hyphens, and
 // underscores, and it must not start with an underscore.

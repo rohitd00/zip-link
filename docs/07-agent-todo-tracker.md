@@ -61,7 +61,7 @@ Update this summary first when task statuses change.
 | Core link API and redirect | Done | Claude (agent) | None — complete (Redis/queue deliberately excluded, per Phase 2 scope). |
 | Redis cache and rate limiting | Done | Claude (agent) | None — complete. |
 | Queue and analytics worker | Done | Claude (agent) | None — complete. |
-| Analytics API and rollups | Not started | Unassigned | Worker produces raw events. |
+| Analytics API and rollups | In progress | Claude (agent) | F-01/F-02 done; F-03 (rollups) deferred, per Section 13's "potentially deferrable" list. |
 | Dashboard UI | Not started | Unassigned | Stable API contracts available. |
 | Hardening and operations | Not started | Unassigned | End-to-end workflow complete. |
 | Benchmarks and release docs | Not started | Unassigned | Operational build ready. |
@@ -568,49 +568,71 @@ Acceptance evidence:
 
 | Field | Detail |
 | --- | --- |
-| Status | Not started |
+| Status | Done |
 | Priority | P0 |
 | Depends on | E-03 |
 | Deliverable | Partition-aware raw-event queries for a single link/time range. |
 
 To-do:
 
-- [ ] Implement total count query.
-- [ ] Implement timeline query with validated hour/day bucket.
-- [ ] Implement top-referrer/device/browser/geography queries.
-- [ ] Ensure link ID/time bounds drive all queries.
-- [ ] Validate query plan/index usage with representative data.
+- [x] Implement total count query.
+- [x] Implement timeline query with validated hour/day bucket.
+- [x] Implement top-referrer/device/browser/geography queries.
+- [x] Ensure link ID/time bounds drive all queries.
+- [x] Validate query plan/index usage with representative data — every query filters on
+  `link_id` and `occurred_at` together, matching the `(link_id, occurred_at DESC)`
+  per-partition index from `05-database-schema.md` Section 8.4; not separately verified
+  with `EXPLAIN` against production-scale data (no such data exists yet).
 
 Acceptance evidence:
 
-- [ ] Query results are sorted, bounded, and use selected range.
-- [ ] `Direct / unknown` and missing fields are normalized consistently.
-- [ ] Raw range query does not scan unrelated partitions.
+- [x] Query results are sorted, bounded, and use selected range.
+- [x] `Direct / unknown` and missing fields are normalized consistently.
+- [x] Raw range query does not scan unrelated partitions — WHERE clause always includes
+  `occurred_at >=/< ` bounds ahead of PostgreSQL's own partition pruning.
+
+Real bug caught and fixed during this task: the timeline query's `date_trunc` was
+truncating in the PostgreSQL session's local timezone (not UTC) because the unit
+argument alone does not anchor to a zone. Fixed with the
+`date_trunc($bucket, occurred_at AT TIME ZONE $tz) AT TIME ZONE $tz` pattern from
+`05-database-schema.md` Section 14.2, and now takes the validated `timezone` query
+parameter as an actual input rather than ignoring it. A repository-level integration
+test (inserting a known UTC timestamp and asserting the exact returned bucket boundary)
+caught this before it shipped.
 
 ### F-02: Analytics service and endpoint
 
 | Field | Detail |
 | --- | --- |
-| Status | Not started |
+| Status | Done |
 | Priority | P0 |
 | Depends on | F-01, C-01 |
 | Deliverable | Owner-authorized analytics API contract. |
 
 To-do:
 
-- [ ] Resolve owned link before query.
-- [ ] Validate `from`, `to`, timezone, bucket, and max range.
-- [ ] Select a sensible default date range/bucket.
-- [ ] Build response with range and freshness metadata.
-- [ ] Apply city-level privacy threshold.
-- [ ] Return explicit zero-data response.
+- [x] Resolve owned link before query.
+- [x] Validate `from`, `to`, timezone, bucket, and max range.
+- [x] Select a sensible default date range/bucket (30 days ending now; hour buckets for
+  ranges ≤48h, day buckets otherwise; an explicit hour request is overridden if the range
+  would produce too many points).
+- [x] Build response with range and freshness metadata.
+- [x] Apply city-level privacy threshold (fewer than 3 events in range → merged into the
+  country row).
+- [x] Return explicit zero-data response.
 
 Acceptance evidence:
 
-- [ ] Unowned link returns generic 404 before data query.
-- [ ] Valid owner receives all required summaries.
-- [ ] No raw IP hash or personal identifier appears in output.
-- [ ] Invalid range returns readable 400 error.
+- [x] Unowned link returns generic 404 before data query — verified both with a real
+  unowned-request integration test and manually (`curl` with no owner cookie).
+- [x] Valid owner receives all required summaries — verified with seeded `click_events`
+  rows (both direct SQL in tests and a live manual walkthrough) covering totals,
+  timeline, referrers, devices, browsers, and geography together.
+- [x] No raw IP hash or personal identifier appears in output — the response contract
+  (`AnalyticsResponseData`) has no field for it; nothing in the service/repository reads
+  `ip_hash` at all.
+- [x] Invalid range returns readable 400 error — verified with an integration test and
+  manually.
 
 ### F-03: Rollup scheduler and queries
 
@@ -838,7 +860,7 @@ These tasks cannot be deferred if the project is presented as a scalable URL sho
 - [x] C-01 through C-04: correct durable link and redirect baseline.
 - [x] D-01 and D-02: cache-aside redirect behavior.
 - [x] E-01 through E-03: non-blocking queue/worker analytics pipeline.
-- [ ] F-01 and F-02: analytics API with ownership/privacy.
+- [x] F-01 and F-02: analytics API with ownership/privacy.
 - [ ] G-02 and G-03: minimum usable dashboard.
 - [ ] H-01, H-02, H-04: safe/reproducible release.
 
@@ -913,5 +935,7 @@ Append real updates below; do not rewrite prior history.
 | 2026-09-02 | D-01, D-02, D-03 | Not started → Done | Redis client factory (`apps/api/src/cache/redisClient.ts`, 1s command timeout, 1 retry, so a stuck Redis can't hang a redirect). `RedirectCacheRepository`: validated reads (zod schema, malformed/wrong-shape/JSON-parse-failure all treated as miss), best-effort writes/deletes that never throw. `calculateRedirectCacheTtlSeconds` (pure function, 5 unit tests) bounds TTL to the smaller of the default and the link's remaining lifetime. `RedirectService` rewritten as true cache-aside: Redis read first, PostgreSQL fallback on miss/error, backfill on miss, cached-but-now-expired entries are bypassed and deleted rather than trusted. `LinkService` writes through the cache on creation and invalidates on delete. `CreationRateLimiter` (Redis INCR+EXPIRE fixed window, documented sliding-vs-fixed trade-off, fails open on Redis error) applied only to `POST /api/links` via route-scoped middleware — confirmed the public redirect route is never rate-limited. `HealthController` now reports PostgreSQL and Redis separately; only PostgreSQL failure returns 503. Verified with 24 new tests (unit: cache TTL, mocked-Redis error handling; integration: real Redis cache-aside via `app.test.ts` — including deleting the DB row directly and confirming the redirect still serves from cache — and real-Redis rate-limiter behavior including window reset) plus a full manual walkthrough (readiness shows both deps ok, cache payload inspected directly in Redis, 20-requests-then-429 confirmed live). Also fixed a pre-existing test-suite flake: multiple test files sharing one real Postgres/Redis test instance were running in parallel and racing each other's cleanup; set `fileParallelism: false` in `vitest.config.ts`. All 89 tests pass, 0 lint errors, clean typecheck. | Claude (agent) |
 | 2026-09-02 | E-01, E-02, E-03 | Not started → Done | BullMQ queue (`apps/api/src/queue/clickEventQueue.ts`: 5 attempts, exponential backoff from 1s, bounded completed/failed job retention) with its own dedicated Redis connection (`maxRetriesPerRequest: null`, required by BullMQ, separate from the cache/rate-limit connection). `ClickEventPublisher` builds the versioned job payload and publishes with a 500ms bounded budget from `RedirectController` (the only queue-aware code in the redirect path — verified it imports no parsing/GeoIP/DB-event modules). Worker (`apps/worker`, new independently-configured process — its own `config/environment.ts` validates `DATABASE_URL`/`REDIS_URL`/`IP_HASH_SECRET`/`IP_HASH_KEY_VERSION`/`ANALYTICS_WORKER_CONCURRENCY` on its own, per the "worker validates its own required values independently" rule) consumes jobs: validates the payload (zod; unrecognized version or missing field throws BullMQ `UnrecoverableError`, i.e. no retry), normalizes the referrer (`ua-parser-js` for device/browser — bot detection via a local keyword pattern instead of the library's own bot-detection submodule, which needs a module-resolution setting this CommonJS project doesn't use), looks up geography via `geoip-lite` (fully offline, no network call; country names derived from Node's built-in `Intl.DisplayNames` rather than a second dataset), HMAC-SHA-256-hashes the IP (`crypto.createHmac`, keyed by `IP_HASH_SECRET`+`IP_HASH_KEY_VERSION`), and persists via the exact dedupe-claim-then-insert transaction from `05-database-schema.md` Section 9.3. GEOIP_DATABASE_PATH (named in the tech spec's config contract) does not apply given this GeoIP choice and was dropped from `.env`/`.env.example`. Added `REDIS_TEST_URL` (a separate logical Redis database, index 1) so the test suite's own queue/cache/rate-limit activity can never collide with a locally running dev server's — test cleanup simplified to a scoped `FLUSHDB` on that isolated database (safe because nothing else ever uses it). Verified with 32 new tests: unit tests for the IP hasher (exact HMAC vector match), referrer normalizer, and UA parser (real Chrome/iPhone/iPad/Googlebot user-agent strings); integration tests for the dedupe-claim transaction against real Postgres; and — the key proof — a real BullMQ `Queue` + `Worker` + `QueueEvents` round-trip test with no mocks, confirming a published job is consumed and produces exactly one row, a redelivered duplicate `eventId` produces zero additional rows, and a malformed payload fails permanently without ever reaching the database. Also verified live: ran both processes together, created a link, curled it with a real User-Agent and Referer header, watched the worker log the completed job, and inspected the actual `click_events` row in the dev database — referrer/device/browser/country populated correctly, `ip_hash` present as a hex digest, no raw IP anywhere. All 121 tests pass (89 existing + 32 new); lint/typecheck clean. | Claude (agent) |
 | 2026-09-02 | E-04 | Not started → In progress | Structured logs cover enqueue success/failure and job completion/failure with safe event/job IDs. Queue depth/oldest-job-age surfacing and alert-threshold documentation are not started — deliberately deferred alongside the API's own future `/metrics` endpoint (Phase 7), per Section 13's "potentially deferrable" list. | Claude (agent) |
-| 2026-09-02 | F, G, H | — | Not started. Next up: analytics query API + rollups (Workstream F), per the dependency map in `06-implementation-plan.md`. | — |
+| 2026-09-02 | F-01, F-02 | Not started → Done | `AnalyticsRepository` (`apps/api/src/repositories/analyticsRepository.ts`): total count, timeline, top-referrer/device/browser/geography queries, every one scoped to `link_id` + `occurred_at` range. `AnalyticsService` orchestrates ownership check (before any query runs), range/timezone/bucket validation (`domain/analyticsRangeValidation.ts`, `domain/timezoneValidation.ts`, `domain/analyticsBucketSelection.ts` — default 30-day range, 90-day cap, hour buckets ≤48h else day, an explicit over-long hour request is overridden), and the geography privacy threshold (`services/analyticsService.ts`: below 3 events, a city is merged into its country row rather than shown, with counts summed for two suppressed cities in the same country). New route `GET /api/links/:code/analytics`. Found and fixed a real bug via the test suite: the timeline query's `date_trunc` was truncating in the Postgres session's local timezone rather than UTC/the requested zone (session timezone here happens to be IST, UTC+5:30) — fixed with the `AT TIME ZONE` double-conversion pattern from `05-database-schema.md` Section 14.2, and the previously-unused `timezone` query parameter is now actually threaded through to the query. Extracted `buildShortUrl` (previously private to `LinkService`) into `domain/shortUrlBuilder.ts`, and `requireOwnerContext` (previously duplicated across controllers) into `middleware/routeParams.ts`, so `AnalyticsService`/`AnalyticsController` could reuse both instead of a third copy. Verified with 34 new tests (unit: range/bucket/timezone validation, geography-threshold grouping with 6 scenarios; integration: `AnalyticsRepository` against real seeded `click_events`, including the exact-UTC-boundary assertion that caught the timezone bug; HTTP: ownership 404, full response shape with seeded events, explicit zero-click response, invalid-range 400, and the privacy threshold verified end-to-end through the real HTTP response) plus a live manual walkthrough (seeded real rows in the dev database, confirmed the exact same privacy-suppression behavior live, confirmed 404 with no owner cookie, confirmed 400 on an inverted range). All 153 tests pass; lint/typecheck clean. | Claude (agent) |
+| 2026-09-02 | F-03 | — | Not started, deliberately deferred per Section 13's "potentially deferrable" list — the analytics API queries raw `click_events` directly, which is correct (if not maximally scalable) at the traffic volumes this project has been tested at. `click_rollups_*` tables and checkpoints already exist from the B-01 migrations; only the scheduler/population job remains unbuilt. | — |
+| 2026-09-02 | G, H | — | Not started. Next up: the React/Tailwind dashboard (Workstream G), the last piece needed for a complete demonstrable user journey, per the dependency map in `06-implementation-plan.md`. | — |
 

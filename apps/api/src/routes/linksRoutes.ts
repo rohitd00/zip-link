@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 import { Router } from "express";
+import type { AnalyticsController } from "../controllers/analyticsController";
 import type { LinksController } from "../controllers/linksController";
 import { asyncRouteHandler } from "../middleware/asyncRouteHandler";
 
@@ -11,6 +12,7 @@ type RequestHandler = (request: Request, response: Response, next: NextFunction)
 // or remove it regardless of how many links they recently created.
 export function createLinksRoutes(
   linksController: LinksController,
+  analyticsController: AnalyticsController,
   creationRateLimitMiddleware: RequestHandler,
 ): Router {
   const router = Router();
@@ -34,6 +36,13 @@ export function createLinksRoutes(
   router.delete(
     "/api/links/:code",
     asyncRouteHandler((request, response) => linksController.deleteLink(request, response)),
+  );
+
+  router.get(
+    "/api/links/:code/analytics",
+    asyncRouteHandler((request, response) =>
+      analyticsController.getLinkAnalytics(request, response),
+    ),
   );
 
   return router;

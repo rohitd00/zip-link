@@ -6,6 +6,7 @@ import type Redis from "ioredis";
 import type { Pool } from "pg";
 import { CreationRateLimiter } from "./cache/creationRateLimiter";
 import { RedirectCacheRepository } from "./cache/redirectCacheRepository";
+import { AnalyticsController } from "./controllers/analyticsController";
 import { HealthController } from "./controllers/healthController";
 import { LinksController } from "./controllers/linksController";
 import { RedirectController } from "./controllers/redirectController";
@@ -14,10 +15,12 @@ import { errorHandlerMiddleware } from "./middleware/errorHandlerMiddleware";
 import { createOwnerContextMiddleware } from "./middleware/ownerContextMiddleware";
 import { requestIdMiddleware } from "./middleware/requestIdMiddleware";
 import { ClickEventPublisher } from "./queue/clickEventPublisher";
+import { AnalyticsRepository } from "./repositories/analyticsRepository";
 import { LinkRepository } from "./repositories/linkRepository";
 import { createHealthRoutes } from "./routes/healthRoutes";
 import { createLinksRoutes } from "./routes/linksRoutes";
 import { createRedirectRoutes } from "./routes/redirectRoutes";
+import { AnalyticsService } from "./services/analyticsService";
 import { LinkService } from "./services/linkService";
 import { RedirectService } from "./services/redirectService";
 
@@ -43,6 +46,7 @@ export interface BuildApiAppOptions {
  */
 export function buildApiApp(options: BuildApiAppOptions): Express {
   const linkRepository = new LinkRepository(options.databasePool);
+  const analyticsRepository = new AnalyticsRepository(options.databasePool);
   const redirectCacheRepository = new RedirectCacheRepository(options.redisClient);
   const creationRateLimiter = new CreationRateLimiter(
     options.redisClient,
@@ -62,9 +66,15 @@ export function buildApiApp(options: BuildApiAppOptions): Express {
     redirectCacheRepository,
     options.redirectCacheTtlSeconds,
   );
+  const analyticsService = new AnalyticsService(
+    linkRepository,
+    analyticsRepository,
+    options.publicBaseUrl,
+  );
 
   const healthController = new HealthController(options.databasePool, options.redisClient);
   const linksController = new LinksController(linkService);
+  const analyticsController = new AnalyticsController(analyticsService);
   const redirectController = new RedirectController(redirectService, clickEventPublisher);
 
   const app = express();
@@ -78,7 +88,11 @@ export function buildApiApp(options: BuildApiAppOptions): Express {
 
   app.use(createOwnerContextMiddleware(options.isProductionEnvironment));
   app.use(
-    createLinksRoutes(linksController, createCreationRateLimitMiddleware(creationRateLimiter)),
+    createLinksRoutes(
+      linksController,
+      analyticsController,
+      createCreationRateLimitMiddleware(creationRateLimiter),
+    ),
   );
 
   app.use(createRedirectRoutes(redirectController));

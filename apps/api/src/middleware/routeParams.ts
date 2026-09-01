@@ -1,4 +1,5 @@
 import type { Request } from "express";
+import type { OwnerContext } from "@shared/contracts/ownerContext";
 import { NotFoundError } from "../domain/applicationErrors";
 
 /**
@@ -16,4 +17,20 @@ export function getRequiredRouteParam(request: Request, paramName: string): stri
   }
 
   return rawValue;
+}
+
+/**
+ * Reads the owner context attached by createOwnerContextMiddleware. Every
+ * route that calls this must be registered after that middleware; if it
+ * is not, this throws immediately rather than silently treating the
+ * request as unauthenticated.
+ */
+export function requireOwnerContext(request: Request): OwnerContext {
+  if (request.ownerContext === undefined) {
+    throw new Error(
+      "requireOwnerContext was called on a route that is missing the owner-context middleware.",
+    );
+  }
+
+  return request.ownerContext;
 }

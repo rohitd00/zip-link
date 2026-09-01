@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import path from "node:path";
 import dotenv from "dotenv";
 import { Pool } from "pg";
@@ -20,6 +21,48 @@ export function createTestDatabasePool(): Pool {
   }
 
   return new Pool({ connectionString: testDatabaseUrl });
+}
+
+export interface TestClickEventInput {
+  linkId: string;
+  shortCode: string;
+  occurredAt: Date;
+  referrerHost?: string | null;
+  deviceType?: "desktop" | "mobile" | "tablet" | "bot" | "unknown";
+  browserName?: string | null;
+  countryCode?: string | null;
+  countryName?: string | null;
+  cityName?: string | null;
+}
+
+/**
+ * Inserts a click_events row directly with SQL, bypassing the analytics
+ * worker (a separate, independently deployed process this API test does
+ * not run). Analytics endpoint tests use this to seed known data instead
+ * of running the full queue/worker pipeline for every test case.
+ */
+export async function insertTestClickEvent(pool: Pool, input: TestClickEventInput): Promise<void> {
+  await pool.query(
+    `
+      INSERT INTO click_events (
+        occurred_at, event_id, link_id, short_code, referrer_host,
+        device_type, browser_name, country_code, country_name, city_name
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10);
+    `,
+    [
+      input.occurredAt,
+      crypto.randomUUID(),
+      input.linkId,
+      input.shortCode,
+      input.referrerHost ?? null,
+      input.deviceType ?? "unknown",
+      input.browserName ?? null,
+      input.countryCode ?? null,
+      input.countryName ?? null,
+      input.cityName ?? null,
+    ],
+  );
 }
 
 /**

@@ -3,7 +3,11 @@ import type { Pool } from "pg";
 import request from "supertest";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { buildApiApp } from "./app";
-import { createTestDatabasePool, truncateAllTestData } from "./testSupport/testDatabasePool";
+import {
+  createTestDatabasePool,
+  insertTestClickEvent,
+  truncateAllTestData,
+} from "./testSupport/testDatabasePool";
 import { clearTestCacheKeys, createTestRedisClient } from "./testSupport/testRedisClient";
 import { createTestClickEventQueue, type TestClickEventQueue } from "./testSupport/testQueue";
 
@@ -343,5 +347,160 @@ describe("Redis cache-aside redirect behavior", () => {
     await request(app).delete(`/api/links/${shortCode}`).set("Cookie", ownerCookie).expect(204);
 
     expect(await redisClient.get(`redirect:link:${shortCode}`)).toBeNull();
+  });
+});
+
+describe("GET /api/links/:code/analytics", () => {
+  it("returns a generic 404 for a link the requester does not own", async () => {
+    const createResponse = await request(app)
+      .post("/api/links")
+      .send({ longUrl: "https://example.com/analytics-private" });
+
+    const response = await request(app).get(
+      `/api/links/${createResponse.body.data.shortCode}/analytics`,
+    );
+
+    expect(response.status).toBe(404);
+  });
+
+  it("returns a generic 404 for an unknown code", async () => {
+    const response = await request(app).get("/api/links/does-not-exist/analytics");
+    expect(response.status).toBe(404);
+  });
+
+  it("returns totals, timeline, and breakdowns for an owned link with seeded events", async () => {
+    const { ownerCookie } = await createLinkAndCaptureOwnerCookie(
+      "https://example.com/analytics-a",
+    );
+    const createResponse = await request(app)
+      .post("/api/links")
+      .set("Cookie", ownerCookie)
+      .send({ longUrl: "https://example.com/analytics-target" });
+
+    const shortCode = createResponse.body.data.shortCode as string;
+    const linkId = createResponse.body.data.id as string;
+
+    await insertTestClickEvent(pool, {
+      linkId,
+      shortCode,
+      occurredAt: new Date(),
+      referrerHost: "news.example.com",
+      deviceType: "mobile",
+      browserName: "Chrome",
+      countryCode: "US",
+      countryName: "United States",
+      cityName: "Chicago",
+    });
+    await insertTestClickEvent(pool, {
+      linkId,
+      shortCode,
+      occurredAt: new Date(),
+      referrerHost: null,
+      deviceType: "desktop",
+      browserName: "Firefox",
+      countryCode: "IN",
+      countryName: "India",
+      cityName: null,
+    });
+
+    const response = await request(app)
+      .get(`/api/links/${shortCode}/analytics`)
+      .set("Cookie", ownerCookie);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.totalClicks).toBe(2);
+    expect(response.body.data.link.shortCode).toBe(shortCode);
+    // The default range is 30 days, which is longer than the hour/day
+    // switchover point (48 hours), so day buckets are expected here.
+    expect(response.body.data.range.bucket).toBe("day");
+    expect(response.body.data.referrers).toContainEqual({
+      name: "news.example.com",
+      clickCount: 1,
+    });
+    expect(response.body.data.referrers).toContainEqual({
+      name: "Direct / unknown",
+      clickCount: 1,
+    });
+    expect(response.body.data.devices).toContainEqual({ name: "mobile", clickCount: 1 });
+    expect(response.body.data.freshness.isEventuallyConsistent).toBe(true);
+  });
+
+  it("returns an explicit zero result for a link with no clicks in range", async () => {
+    const { ownerCookie } = await createLinkAndCaptureOwnerCookie(
+      "https://example.com/analytics-b",
+    );
+    const createResponse = await request(app)
+      .post("/api/links")
+      .set("Cookie", ownerCookie)
+      .send({ longUrl: "https://example.com/no-clicks" });
+
+    const response = await request(app)
+      .get(`/api/links/${createResponse.body.data.shortCode}/analytics`)
+      .set("Cookie", ownerCookie);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.totalClicks).toBe(0);
+    expect(response.body.data.timeline).toEqual([]);
+  });
+
+  it("applies the requested date range and rejects an invalid one", async () => {
+    const { ownerCookie } = await createLinkAndCaptureOwnerCookie(
+      "https://example.com/analytics-c",
+    );
+    const createResponse = await request(app)
+      .post("/api/links")
+      .set("Cookie", ownerCookie)
+      .send({ longUrl: "https://example.com/range-target" });
+
+    const shortCode = createResponse.body.data.shortCode as string;
+
+    const invalidRangeResponse = await request(app)
+      .get(
+        `/api/links/${shortCode}/analytics?from=2026-09-05T00:00:00.000Z&to=2026-09-01T00:00:00.000Z`,
+      )
+      .set("Cookie", ownerCookie);
+
+    expect(invalidRangeResponse.status).toBe(400);
+    expect(invalidRangeResponse.body.error.code).toBe("VALIDATION_ERROR");
+
+    const validRangeResponse = await request(app)
+      .get(
+        `/api/links/${shortCode}/analytics?from=2026-01-01T00:00:00.000Z&to=2026-01-31T00:00:00.000Z`,
+      )
+      .set("Cookie", ownerCookie);
+
+    expect(validRangeResponse.status).toBe(200);
+    expect(validRangeResponse.body.data.range.from).toBe("2026-01-01T00:00:00.000Z");
+    expect(validRangeResponse.body.data.range.to).toBe("2026-01-31T00:00:00.000Z");
+  });
+
+  it("suppresses a low-volume city into its country in the response", async () => {
+    const { ownerCookie } = await createLinkAndCaptureOwnerCookie(
+      "https://example.com/analytics-d",
+    );
+    const createResponse = await request(app)
+      .post("/api/links")
+      .set("Cookie", ownerCookie)
+      .send({ longUrl: "https://example.com/privacy-target" });
+
+    const shortCode = createResponse.body.data.shortCode as string;
+    const linkId = createResponse.body.data.id as string;
+
+    await insertTestClickEvent(pool, {
+      linkId,
+      shortCode,
+      occurredAt: new Date(),
+      countryCode: "US",
+      countryName: "United States",
+      cityName: "Peoria",
+    });
+
+    const response = await request(app)
+      .get(`/api/links/${shortCode}/analytics`)
+      .set("Cookie", ownerCookie);
+
+    expect(response.body.data.geography).toEqual([
+      { country: "United States", city: null, clickCount: 1 },
+    ]);
   });
 });

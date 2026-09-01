@@ -1,6 +1,5 @@
 import type { Request, Response } from "express";
-import type { OwnerContext } from "@shared/contracts/ownerContext";
-import { getRequiredRouteParam } from "../middleware/routeParams";
+import { getRequiredRouteParam, requireOwnerContext } from "../middleware/routeParams";
 import type { LinkService } from "../services/linkService";
 import {
   parseCreateLinkRequestBody,
@@ -62,14 +61,4 @@ export class LinksController {
 
     response.status(204).send();
   }
-}
-
-function requireOwnerContext(request: Request): OwnerContext {
-  if (request.ownerContext === undefined) {
-    throw new Error(
-      "requireOwnerContext was called on a route that is missing the owner-context middleware.",
-    );
-  }
-
-  return request.ownerContext;
 }

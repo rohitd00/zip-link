@@ -5,13 +5,14 @@ analytics must never slow them down.** Redirect resolution is a cache-first, low
 read path. Click analytics are captured asynchronously through a queue and processed by a
 separate worker, so a slow database write or GeoIP lookup can never delay a visitor.
 
-> **Project status:** Phases 0–4 of the implementation plan are complete: repository
+> **Project status:** Phases 0–5 of the implementation plan are complete: repository
 > foundation, database schema, a fully working database-backed link
 > create/list/detail/delete/redirect flow, Redis cache-aside redirects, Redis-backed
-> creation rate limiting, and an asynchronous BullMQ click-analytics queue with a
-> separate enrichment worker (user-agent parsing, offline GeoIP, HMAC IP hashing,
-> idempotent inserts). The analytics query API and the React dashboard are **not
-> implemented yet** — see [Implementation status](#implementation-status) below.
+> creation rate limiting, an asynchronous BullMQ click-analytics queue with a separate
+> enrichment worker, and an owner-authorized analytics query API (totals, timeline,
+> referrer/device/browser/geography breakdowns, privacy-thresholded city display). Only
+> the React dashboard and rollups remain — see [Implementation status](#implementation-status)
+> below.
 
 Full product/technical documentation lives in [`docs/`](docs/):
 [PRD](docs/01-prd.md) · [Technical specification](docs/02-technical-specification.md) ·
@@ -60,8 +61,8 @@ Full product/technical documentation lives in [`docs/`](docs/):
 ```
 
 Today, every portion of this diagram exists and runs — the API, PostgreSQL, Redis (cache,
-rate limiter, and BullMQ), and the analytics worker. Only the analytics _query_ API and
-the React dashboard remain unbuilt.
+rate limiter, and BullMQ), and the analytics worker, plus an analytics query API reading
+back what the worker stored. Only the React dashboard and rollups remain unbuilt.
 
 ## Implementation status
 
@@ -79,15 +80,16 @@ the React dashboard remain unbuilt.
 | Redis-backed creation rate limiting (fail-open on Redis outage)                         | Done                                                                                                                                 |
 | BullMQ click-event queue (producer, on the redirect path)                               | Done — bounded 500ms publish budget; a queue failure never fails the redirect                                                        |
 | Analytics worker (UA parsing, offline GeoIP, HMAC IP hashing, idempotent insert)        | Done                                                                                                                                 |
-| Analytics query API + rollups                                                           | Not started                                                                                                                          |
+| Analytics query API (totals, timeline, referrer/device/browser/geography breakdowns)    | Done — reads raw `click_events` directly (see rollups row below)                                                                     |
+| Rollups (`click_rollups_*` tables, scheduler)                                           | Not started — tables exist from the schema migration but nothing populates them yet                                                  |
 | React/Tailwind dashboard                                                                | Not started                                                                                                                          |
 | Docker images for API/worker/web, full container journey                                | `docker-compose.yml` starts Postgres+Redis and is actually used for Redis in local dev (see below); API/worker not yet containerized |
 | Load benchmarking                                                                       | Not started                                                                                                                          |
 
 This matches the "foundation first" phased approach in
-[the implementation plan](docs/06-implementation-plan.md): Phases 0–4 are complete —
-clicks are captured, enriched, and durably stored, without ever slowing down a redirect.
-Phase 5 onward (analytics query API, dashboard, hardening, benchmarks) come next.
+[the implementation plan](docs/06-implementation-plan.md): Phases 0–5 are complete —
+clicks are captured, enriched, durably stored, and queryable by their owner, without ever
+slowing down a redirect. Dashboard, hardening, and benchmarks come next.
 
 ## Tech stack
 
@@ -302,15 +304,16 @@ All management endpoints are under `/api` and require the anonymous owner-contex
 every reserved path, so `api`, `health`, and other reserved words can never be interpreted
 as a short code.
 
-| Method   | Path               | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| -------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST`   | `/api/links`       | Create a link (generated code or custom alias); returns an existing link instead of a duplicate by default. Rate-limited per owner (`429` + `Retry-After` once exceeded); the public redirect route below is never subject to this limit.                                                                                                                                                                                 |
-| `GET`    | `/api/links`       | List the current owner's active links, newest first, with cursor pagination and optional search.                                                                                                                                                                                                                                                                                                                          |
-| `GET`    | `/api/links/:code` | Read one owned link's metadata and click count.                                                                                                                                                                                                                                                                                                                                                                           |
-| `DELETE` | `/api/links/:code` | Soft-delete an owned link. Idempotent; returns a generic 404 for a link you don't own.                                                                                                                                                                                                                                                                                                                                    |
-| `GET`    | `/:code`           | Public redirect. Cache-aside: checks Redis first, falls back to PostgreSQL on a miss or Redis error, and backfills the cache. On success, also publishes a click-analytics job to BullMQ (bounded to a 500ms budget; a queue failure or timeout never blocks the redirect). `302` on success, `404` for unknown/deleted, `410` for expired. Add `Accept: application/json` for a JSON error body instead of an HTML page. |
-| `GET`    | `/health/live`     | Liveness — process is responding. Never touches a dependency.                                                                                                                                                                                                                                                                                                                                                             |
-| `GET`    | `/health/ready`    | Readiness — `{ "status": "ok" \| "unavailable", "dependencies": { "database": "ok" \| "unavailable", "cache": "ok" \| "degraded" } }`. Only a PostgreSQL failure returns `503`; Redis being down is reported as `"degraded"` but does not fail readiness, since redirects still work (just slower) without it.                                                                                                            |
+| Method   | Path                         | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| -------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST`   | `/api/links`                 | Create a link (generated code or custom alias); returns an existing link instead of a duplicate by default. Rate-limited per owner (`429` + `Retry-After` once exceeded); the public redirect route below is never subject to this limit.                                                                                                                                                                                 |
+| `GET`    | `/api/links`                 | List the current owner's active links, newest first, with cursor pagination and optional search.                                                                                                                                                                                                                                                                                                                          |
+| `GET`    | `/api/links/:code`           | Read one owned link's metadata and click count.                                                                                                                                                                                                                                                                                                                                                                           |
+| `DELETE` | `/api/links/:code`           | Soft-delete an owned link. Idempotent; returns a generic 404 for a link you don't own.                                                                                                                                                                                                                                                                                                                                    |
+| `GET`    | `/api/links/:code/analytics` | Totals, timeline, and referrer/device/browser/geography breakdowns for an owned link. See [Analytics query API](#analytics-query-api) below.                                                                                                                                                                                                                                                                              |
+| `GET`    | `/:code`                     | Public redirect. Cache-aside: checks Redis first, falls back to PostgreSQL on a miss or Redis error, and backfills the cache. On success, also publishes a click-analytics job to BullMQ (bounded to a 500ms budget; a queue failure or timeout never blocks the redirect). `302` on success, `404` for unknown/deleted, `410` for expired. Add `Accept: application/json` for a JSON error body instead of an HTML page. |
+| `GET`    | `/health/live`               | Liveness — process is responding. Never touches a dependency.                                                                                                                                                                                                                                                                                                                                                             |
+| `GET`    | `/health/ready`              | Readiness — `{ "status": "ok" \| "unavailable", "dependencies": { "database": "ok" \| "unavailable", "cache": "ok" \| "degraded" } }`. Only a PostgreSQL failure returns `503`; Redis being down is reported as `"degraded"` but does not fail readiness, since redirects still work (just slower) without it.                                                                                                            |
 
 Every error response has the shape:
 
@@ -324,6 +327,55 @@ Every error response has the shape:
   }
 }
 ```
+
+### Analytics query API
+
+`GET /api/links/:code/analytics` accepts four optional query parameters:
+
+| Param      | Default                            | Notes                                                                                                                                                                             |
+| ---------- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `from`     | 30 days before `to`                | ISO-8601 timestamp.                                                                                                                                                               |
+| `to`       | now                                | ISO-8601 timestamp. `from` must be before `to`, and the range cannot exceed 90 days.                                                                                              |
+| `bucket`   | `hour` for ranges ≤48h, else `day` | An explicit `hour` request is overridden to `day` if the range would produce too many points.                                                                                     |
+| `timezone` | `UTC`                              | Any IANA zone name (validated against the JS runtime's own timezone database). Affects how timeline buckets are aligned, not how the range boundaries themselves are interpreted. |
+
+Ownership is checked **before** any analytics query runs — an unowned or unknown code
+returns a generic `404` without ever touching `click_events`. Response shape:
+
+```json
+{
+  "data": {
+    "link": { "shortCode": "w7e", "shortUrl": "...", "longUrl": "..." },
+    "range": { "from": "...", "to": "...", "timezone": "UTC", "bucket": "day" },
+    "totalClicks": 42,
+    "timeline": [{ "bucketStart": "...", "clickCount": 5 }],
+    "referrers": [{ "name": "news.example.com", "clickCount": 20 }],
+    "devices": [{ "name": "mobile", "clickCount": 30 }],
+    "browsers": [{ "name": "Chrome", "clickCount": 25 }],
+    "geography": [{ "country": "United States", "city": "Chicago", "clickCount": 10 }],
+    "freshness": { "isEventuallyConsistent": true, "lastRollupAt": null }
+  }
+}
+```
+
+Notes:
+
+- **No rollups yet.** Every response reads raw `click_events` directly — correct, but not
+  yet optimized for very large link histories. `freshness.lastRollupAt` is always `null`
+  because there is no rollup checkpoint to report; `isEventuallyConsistent` is always
+  `true`, honestly reflecting that the worker may not have finished processing the most
+  recent clicks yet.
+- **Geography is privacy-thresholded.** A city with fewer than 3 events in the requested
+  range is folded into its country (`city: null`) rather than shown on its own — a
+  handful of clicks from one named city could otherwise identify a specific small group
+  of visitors. Two suppressed cities in the same country are merged into one row with
+  their counts summed, not dropped.
+- **Bucket timestamps are computed in the requested timezone, not the database server's
+  local timezone.** This was an actual bug caught by the test suite during development:
+  `date_trunc('day', occurred_at)` alone truncates using the Postgres session's own
+  timezone setting, which is not necessarily UTC. The query now explicitly converts to
+  the requested zone, truncates, and converts back (`AnalyticsRepository.getTimeline`),
+  matching the pattern in `database-schema.md` Section 14.2.
 
 ## Privacy and security behavior implemented so far
 
@@ -362,13 +414,13 @@ as an actual cleanup job — see [Implementation status](#implementation-status)
 
 ## Known limitations (current state)
 
-- **No analytics query API or dashboard yet.** Clicks are captured, enriched, and stored
-  correctly (verified end-to-end, including manually inspecting real rows), but nothing
-  yet reads them back out; `totalClicks` in `GET /api/links` will always read `0` until
-  the analytics query API is built.
-- **No rollups yet.** `click_rollups_*` tables exist but nothing populates them; any
-  future analytics endpoint would need to query raw `click_events` directly until the
-  rollup scheduler (Phase 5) is built.
+- **No dashboard UI yet.** The analytics query API is done and verified, but there is no
+  web interface for it — everything is exercised through the JSON API only.
+- **No rollups yet.** `click_rollups_*` tables exist but nothing populates them; the
+  analytics API queries raw `click_events` directly for every request. This is correct
+  for the traffic volumes this project has actually been tested at, but a link with a
+  very large click history would eventually need rollups to stay fast — see the rollup
+  scheduler work still listed in `docs/06-implementation-plan.md`.
 - **No retention/cleanup job yet.** Old partitions, dedupe rows, and events are not
   automatically pruned.
 - **Rate limiter is a fixed window, not a true sliding window.** A burst spanning two
