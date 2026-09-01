@@ -5,17 +5,21 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { buildApiApp } from "./app";
 import { createTestDatabasePool, truncateAllTestData } from "./testSupport/testDatabasePool";
 import { clearTestCacheKeys, createTestRedisClient } from "./testSupport/testRedisClient";
+import { createTestClickEventQueue, type TestClickEventQueue } from "./testSupport/testQueue";
 
 let pool: Pool;
 let redisClient: Redis;
+let testQueue: TestClickEventQueue;
 let app: ReturnType<typeof buildApiApp>;
 
 beforeAll(() => {
   pool = createTestDatabasePool();
   redisClient = createTestRedisClient();
+  testQueue = createTestClickEventQueue();
   app = buildApiApp({
     databasePool: pool,
     redisClient,
+    clickEventQueue: testQueue.queue,
     publicBaseUrl: "https://sho.rt",
     ownerCookieSecret: "test-owner-cookie-secret",
     redirectCacheTtlSeconds: 86400,
@@ -37,6 +41,8 @@ afterEach(async () => {
 afterAll(async () => {
   await pool.end();
   await redisClient.quit();
+  await testQueue.queue.close();
+  await testQueue.connection.quit();
 });
 
 /**

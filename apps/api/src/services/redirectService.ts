@@ -9,6 +9,7 @@ export type CacheReadOutcome = "hit" | "miss" | "error";
 export type RedirectResolution =
   | {
       outcome: "redirect";
+      linkId: string;
       destinationUrl: string;
       redirectStatusCode: number;
       cacheResult: CacheReadOutcome;
@@ -56,6 +57,7 @@ export class RedirectService {
 
     return {
       outcome: "redirect",
+      linkId: payload.linkId,
       destinationUrl: payload.longUrl,
       redirectStatusCode: payload.redirectStatusCode,
       cacheResult: "hit",
@@ -98,6 +100,7 @@ export class RedirectService {
 
     return {
       outcome: "redirect",
+      linkId: link.id,
       destinationUrl: link.longUrl,
       redirectStatusCode: link.redirectStatusCode,
       cacheResult,

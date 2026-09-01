@@ -2,16 +2,21 @@ import { buildApiApp } from "./app";
 import { createRedisClient } from "./cache/redisClient";
 import { loadApiEnvironmentConfig } from "./config/environment";
 import { logger } from "./observability/logger";
+import { createClickEventQueue } from "./queue/clickEventQueue";
+import { createQueueRedisConnection } from "./queue/queueRedisConnection";
 import { createDatabasePool } from "./repositories/databasePool";
 
 function startApiServer(): void {
   const config = loadApiEnvironmentConfig();
   const databasePool = createDatabasePool(config.databaseConnectionString);
   const redisClient = createRedisClient(config.redisConnectionString);
+  const queueRedisConnection = createQueueRedisConnection(config.redisConnectionString);
+  const clickEventQueue = createClickEventQueue(queueRedisConnection);
 
   const app = buildApiApp({
     databasePool,
     redisClient,
+    clickEventQueue,
     publicBaseUrl: config.publicBaseUrl,
     ownerCookieSecret: config.ownerCookieSecret,
     redirectCacheTtlSeconds: config.redirectCacheTtlSeconds,
@@ -31,7 +36,12 @@ function startApiServer(): void {
     logger.info("Shutting down API server.", { signal: signalName });
 
     server.close(() => {
-      Promise.allSettled([databasePool.end(), redisClient.quit()])
+      Promise.allSettled([
+        databasePool.end(),
+        redisClient.quit(),
+        clickEventQueue.close(),
+        queueRedisConnection.quit(),
+      ])
         .then((results) => {
           const failure = results.find((result) => result.status === "rejected");
 

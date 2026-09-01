@@ -1,4 +1,5 @@
 import cookieParser from "cookie-parser";
+import type { Queue } from "bullmq";
 import express, { type Express } from "express";
 import helmet from "helmet";
 import type Redis from "ioredis";
@@ -12,6 +13,7 @@ import { createCreationRateLimitMiddleware } from "./middleware/creationRateLimi
 import { errorHandlerMiddleware } from "./middleware/errorHandlerMiddleware";
 import { createOwnerContextMiddleware } from "./middleware/ownerContextMiddleware";
 import { requestIdMiddleware } from "./middleware/requestIdMiddleware";
+import { ClickEventPublisher } from "./queue/clickEventPublisher";
 import { LinkRepository } from "./repositories/linkRepository";
 import { createHealthRoutes } from "./routes/healthRoutes";
 import { createLinksRoutes } from "./routes/linksRoutes";
@@ -24,6 +26,7 @@ const MAX_JSON_REQUEST_BODY_SIZE = "10kb";
 export interface BuildApiAppOptions {
   databasePool: Pool;
   redisClient: Redis;
+  clickEventQueue: Queue;
   publicBaseUrl: string;
   ownerCookieSecret: string;
   redirectCacheTtlSeconds: number;
@@ -46,6 +49,7 @@ export function buildApiApp(options: BuildApiAppOptions): Express {
     options.createRateLimitMaxRequests,
     options.createRateLimitWindowSeconds,
   );
+  const clickEventPublisher = new ClickEventPublisher(options.clickEventQueue);
 
   const linkService = new LinkService(
     linkRepository,
@@ -61,7 +65,7 @@ export function buildApiApp(options: BuildApiAppOptions): Express {
 
   const healthController = new HealthController(options.databasePool, options.redisClient);
   const linksController = new LinksController(linkService);
-  const redirectController = new RedirectController(redirectService);
+  const redirectController = new RedirectController(redirectService, clickEventPublisher);
 
   const app = express();
 

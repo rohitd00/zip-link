@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import type Redis from "ioredis";
 import type { Pool } from "pg";
+import { runWithTimeout } from "../utils/runWithTimeout";
 
 const READINESS_CHECK_TIMEOUT_MILLISECONDS = 2000;
 
@@ -62,21 +63,5 @@ export class HealthController {
     } catch {
       return false;
     }
-  }
-}
-
-async function runWithTimeout<T>(work: Promise<T>, timeoutMilliseconds: number): Promise<T> {
-  let timeoutHandle: NodeJS.Timeout | undefined;
-
-  const timeoutPromise = new Promise<never>((_resolve, reject) => {
-    timeoutHandle = setTimeout(() => {
-      reject(new Error("Readiness check timed out."));
-    }, timeoutMilliseconds);
-  });
-
-  try {
-    return await Promise.race([work, timeoutPromise]);
-  } finally {
-    clearTimeout(timeoutHandle);
   }
 }

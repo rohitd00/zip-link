@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { isPlausibleShortCodeShape } from "../domain/shortCodeShapeValidation";
 import { logger } from "../observability/logger";
+import type { ClickEventPublisher } from "../queue/clickEventPublisher";
 import type { RedirectService } from "../services/redirectService";
 import { renderLinkExpiredHtmlPage, renderLinkUnavailableHtmlPage } from "../views/publicErrorPage";
 
@@ -8,10 +9,14 @@ import { renderLinkExpiredHtmlPage, renderLinkUnavailableHtmlPage } from "../vie
  * Handles the public GET /:code route. This is the most latency-sensitive
  * handler in the project: it must resolve a link and respond without
  * performing any analytics parsing, enrichment, or aggregation work. See
- * Rule A-01 in project-rules.md.
+ * Rule A-01 in project-rules.md. It is allowed to build a small job
+ * payload and hand it to the queue publisher — nothing more.
  */
 export class RedirectController {
-  constructor(private readonly redirectService: RedirectService) {}
+  constructor(
+    private readonly redirectService: RedirectService,
+    private readonly clickEventPublisher: ClickEventPublisher,
+  ) {}
 
   async handleRedirect(request: Request, response: Response): Promise<void> {
     const rawShortCode = request.params.code;
@@ -42,6 +47,25 @@ export class RedirectController {
       this.sendExpiredResponse(request, response);
       return;
     }
+
+    const publishOutcome = await this.clickEventPublisher.publish({
+      linkId: resolution.linkId,
+      shortCode,
+      occurredAt: new Date(),
+      referrer: request.headers.referer ?? null,
+      userAgent: request.headers["user-agent"] ?? null,
+      // No reverse-proxy trust is configured, so request.ip is the direct
+      // socket address, not an attacker-controllable header. A production
+      // deployment behind a real proxy must configure Express's
+      // "trust proxy" setting deliberately before relying on this value,
+      // per Rule S-02.
+      clientIpAddress: request.ip ?? null,
+    });
+
+    logger.info("Attempted to publish a click-analytics event.", {
+      shortCode,
+      publishOutcome,
+    });
 
     response.redirect(resolution.redirectStatusCode, resolution.destinationUrl);
   }

@@ -60,7 +60,7 @@ Update this summary first when task statuses change.
 | Database and domain contracts | Done | Claude (agent) | None — complete. |
 | Core link API and redirect | Done | Claude (agent) | None — complete (Redis/queue deliberately excluded, per Phase 2 scope). |
 | Redis cache and rate limiting | Done | Claude (agent) | None — complete. |
-| Queue and analytics worker | Not started | Unassigned | Redis/cache foundation complete. |
+| Queue and analytics worker | Done | Claude (agent) | None — complete. |
 | Analytics API and rollups | Not started | Unassigned | Worker produces raw events. |
 | Dashboard UI | Not started | Unassigned | Stable API contracts available. |
 | Hardening and operations | Not started | Unassigned | End-to-end workflow complete. |
@@ -449,7 +449,7 @@ Acceptance evidence:
 
 | Field | Detail |
 | --- | --- |
-| Status | Not started |
+| Status | Done |
 | Priority | P0 |
 | Depends on | D-01, B-03 |
 | Deliverable | Named click-analytics queue with explicit retry/retention policy. |
@@ -471,7 +471,7 @@ Acceptance evidence:
 
 | Field | Detail |
 | --- | --- |
-| Status | Not started |
+| Status | Done |
 | Priority | P0 |
 | Depends on | E-01, D-02 |
 | Deliverable | Best-effort queue event publication after successful redirect resolution. |
@@ -487,15 +487,25 @@ To-do:
 
 Acceptance evidence:
 
-- [ ] Queue job includes link ID, code, occurrence time, referrer, UA, and IP input.
-- [ ] Public redirect succeeds when publisher throws/times out.
-- [ ] Redirect controller does not import parsing/GeoIP/database event modules.
+- [x] Queue job includes link ID, code, occurrence time, referrer, UA, and IP input.
+- [x] Public redirect succeeds when publisher throws/times out (bounded to 500ms; the
+  publish call is awaited but never allowed to block longer than that).
+- [x] Redirect controller does not import parsing/GeoIP/database event modules — only
+  `ClickEventPublisher`.
+
+Note: "secure proxy configuration" is not yet applicable — this deployment has no reverse
+proxy in front of it, so Express's default `trust proxy: false` is correct as-is and
+`request.ip` is the real socket address, not a spoofable header. A production deployment
+behind a real reverse proxy must configure `trust proxy` deliberately before relying on
+`request.ip`, per Rule S-02; this is documented as a known limitation in the README and in
+a code comment in `redirectController.ts`, not implemented, since there is no proxy
+topology yet to configure it against.
 
 ### E-03: Worker enrichment and persistence
 
 | Field | Detail |
 | --- | --- |
-| Status | Not started |
+| Status | Done |
 | Priority | P0 |
 | Depends on | E-01, B-01 |
 | Deliverable | Worker consumes, enriches, de-identifies, and persist click events. |
@@ -523,18 +533,29 @@ Acceptance evidence:
 
 | Field | Detail |
 | --- | --- |
-| Status | Not started |
+| Status | In progress |
 | Priority | P1 |
 | Depends on | E-02, E-03 |
 | Deliverable | Metrics/logs for queue delivery and worker processing. |
 
 To-do:
 
-- [ ] Emit enqueue success/failure counters.
-- [ ] Emit job completion/failure/duration metrics.
-- [ ] Surface queue depth and oldest-job age internally.
-- [ ] Include safe event/job IDs in structured logs.
-- [ ] Add alert thresholds/documented operator guidance.
+- [x] Emit enqueue success/failure counters — as structured log lines
+  (`"Attempted to publish a click-analytics event."` with `publishOutcome`), not yet a
+  numeric counter/metrics endpoint.
+- [x] Emit job completion/failure/duration metrics — as structured log lines
+  (`"Click-analytics job completed."` / `"Click-analytics job failed."`), not yet a
+  numeric duration histogram.
+- [ ] Surface queue depth and oldest-job age internally. Not started; deferred per the
+  critical-path checklist below (a `/metrics` endpoint is Phase 7 hardening work).
+- [x] Include safe event/job IDs in structured logs.
+- [ ] Add alert thresholds/documented operator guidance. Not started.
+
+This remains deliberately partial: Section 13 of this document lists "E-04: advanced
+alerting dashboards" as potentially deferrable after the core pipeline works, which it
+now does (see E-01 through E-03). Structured logs already make queue/worker behavior
+inspectable; a real metrics endpoint is better built alongside the API's own `/metrics`
+in Phase 7 rather than as a one-off here.
 
 Acceptance evidence:
 
@@ -812,18 +833,19 @@ Acceptance evidence:
 
 These tasks cannot be deferred if the project is presented as a scalable URL shortener with analytics:
 
-- [ ] A-01 through A-04: reproducible environment.
-- [ ] B-01, B-03, B-04: schema and trusted domain rules.
-- [ ] C-01 through C-04: correct durable link and redirect baseline.
-- [ ] D-01 and D-02: cache-aside redirect behavior.
-- [ ] E-01 through E-03: non-blocking queue/worker analytics pipeline.
+- [x] A-01 through A-04: reproducible environment.
+- [x] B-01, B-03, B-04: schema and trusted domain rules.
+- [x] C-01 through C-04: correct durable link and redirect baseline.
+- [x] D-01 and D-02: cache-aside redirect behavior.
+- [x] E-01 through E-03: non-blocking queue/worker analytics pipeline.
 - [ ] F-01 and F-02: analytics API with ownership/privacy.
 - [ ] G-02 and G-03: minimum usable dashboard.
 - [ ] H-01, H-02, H-04: safe/reproducible release.
 
 Potentially deferrable after the core is working:
 
-- [ ] B-02: automated partition maintenance (must still have a documented manual process).
+- [x] B-02: automated partition maintenance (documented manual process: `npm run
+  maintain:partitions`, verified idempotent).
 - [ ] D-03: rate limiter tuning beyond baseline policy.
 - [ ] E-04: advanced alerting dashboards.
 - [ ] F-03: full dimension rollups, if raw short-range queries are safe and documented.
@@ -889,5 +911,7 @@ Append real updates below; do not rewrite prior history.
 | 2026-09-02 | C-01 to C-04 | Not started → Done | Signed anonymous owner-context cookie middleware; `LinkRepository` (parameterized SQL only); `LinkService` (create/list/get/delete business rules, duplicate handling, custom alias vs. generated code); `POST`/`GET`/`GET :code`/`DELETE /api/links`; public `GET /:code` redirect (302/404/410) registered after all `/api` and `/health` routes. Verified via 27 integration tests (`apps/api/src/repositories/linkRepository.test.ts`, `apps/api/src/app.test.ts`) against the real `url_shortener_test` database, covering concurrent ID allocation, alias conflicts, cross-owner denial (404, not 403), expiry, and idempotent delete — plus a full manual curl walkthrough of create → duplicate → alias conflict → list → detail → delete → post-delete 404. All 65 tests pass; lint/typecheck clean. | Claude (agent) |
 | 2026-09-02 | A-04 | Blocked → Done | User started Docker Desktop; its CLI was found at `%LOCALAPPDATA%\Programs\DockerDesktop\resources\bin\docker.exe` (not on `PATH`, not under the older `Program Files\Docker\Docker` location). Ran `docker compose up -d redis` successfully; `docker exec url-shortener-redis redis-cli ping` returned `PONG`. PostgreSQL remains native by choice (already working), not a limitation. | Claude (agent) |
 | 2026-09-02 | D-01, D-02, D-03 | Not started → Done | Redis client factory (`apps/api/src/cache/redisClient.ts`, 1s command timeout, 1 retry, so a stuck Redis can't hang a redirect). `RedirectCacheRepository`: validated reads (zod schema, malformed/wrong-shape/JSON-parse-failure all treated as miss), best-effort writes/deletes that never throw. `calculateRedirectCacheTtlSeconds` (pure function, 5 unit tests) bounds TTL to the smaller of the default and the link's remaining lifetime. `RedirectService` rewritten as true cache-aside: Redis read first, PostgreSQL fallback on miss/error, backfill on miss, cached-but-now-expired entries are bypassed and deleted rather than trusted. `LinkService` writes through the cache on creation and invalidates on delete. `CreationRateLimiter` (Redis INCR+EXPIRE fixed window, documented sliding-vs-fixed trade-off, fails open on Redis error) applied only to `POST /api/links` via route-scoped middleware — confirmed the public redirect route is never rate-limited. `HealthController` now reports PostgreSQL and Redis separately; only PostgreSQL failure returns 503. Verified with 24 new tests (unit: cache TTL, mocked-Redis error handling; integration: real Redis cache-aside via `app.test.ts` — including deleting the DB row directly and confirming the redirect still serves from cache — and real-Redis rate-limiter behavior including window reset) plus a full manual walkthrough (readiness shows both deps ok, cache payload inspected directly in Redis, 20-requests-then-429 confirmed live). Also fixed a pre-existing test-suite flake: multiple test files sharing one real Postgres/Redis test instance were running in parallel and racing each other's cleanup; set `fileParallelism: false` in `vitest.config.ts`. All 89 tests pass, 0 lint errors, clean typecheck. | Claude (agent) |
-| 2026-09-02 | E, F, G, H | — | Not started. Next up: BullMQ click-event queue + analytics worker (Workstream E), per the dependency map in `06-implementation-plan.md`. | — |
+| 2026-09-02 | E-01, E-02, E-03 | Not started → Done | BullMQ queue (`apps/api/src/queue/clickEventQueue.ts`: 5 attempts, exponential backoff from 1s, bounded completed/failed job retention) with its own dedicated Redis connection (`maxRetriesPerRequest: null`, required by BullMQ, separate from the cache/rate-limit connection). `ClickEventPublisher` builds the versioned job payload and publishes with a 500ms bounded budget from `RedirectController` (the only queue-aware code in the redirect path — verified it imports no parsing/GeoIP/DB-event modules). Worker (`apps/worker`, new independently-configured process — its own `config/environment.ts` validates `DATABASE_URL`/`REDIS_URL`/`IP_HASH_SECRET`/`IP_HASH_KEY_VERSION`/`ANALYTICS_WORKER_CONCURRENCY` on its own, per the "worker validates its own required values independently" rule) consumes jobs: validates the payload (zod; unrecognized version or missing field throws BullMQ `UnrecoverableError`, i.e. no retry), normalizes the referrer (`ua-parser-js` for device/browser — bot detection via a local keyword pattern instead of the library's own bot-detection submodule, which needs a module-resolution setting this CommonJS project doesn't use), looks up geography via `geoip-lite` (fully offline, no network call; country names derived from Node's built-in `Intl.DisplayNames` rather than a second dataset), HMAC-SHA-256-hashes the IP (`crypto.createHmac`, keyed by `IP_HASH_SECRET`+`IP_HASH_KEY_VERSION`), and persists via the exact dedupe-claim-then-insert transaction from `05-database-schema.md` Section 9.3. GEOIP_DATABASE_PATH (named in the tech spec's config contract) does not apply given this GeoIP choice and was dropped from `.env`/`.env.example`. Added `REDIS_TEST_URL` (a separate logical Redis database, index 1) so the test suite's own queue/cache/rate-limit activity can never collide with a locally running dev server's — test cleanup simplified to a scoped `FLUSHDB` on that isolated database (safe because nothing else ever uses it). Verified with 32 new tests: unit tests for the IP hasher (exact HMAC vector match), referrer normalizer, and UA parser (real Chrome/iPhone/iPad/Googlebot user-agent strings); integration tests for the dedupe-claim transaction against real Postgres; and — the key proof — a real BullMQ `Queue` + `Worker` + `QueueEvents` round-trip test with no mocks, confirming a published job is consumed and produces exactly one row, a redelivered duplicate `eventId` produces zero additional rows, and a malformed payload fails permanently without ever reaching the database. Also verified live: ran both processes together, created a link, curled it with a real User-Agent and Referer header, watched the worker log the completed job, and inspected the actual `click_events` row in the dev database — referrer/device/browser/country populated correctly, `ip_hash` present as a hex digest, no raw IP anywhere. All 121 tests pass (89 existing + 32 new); lint/typecheck clean. | Claude (agent) |
+| 2026-09-02 | E-04 | Not started → In progress | Structured logs cover enqueue success/failure and job completion/failure with safe event/job IDs. Queue depth/oldest-job-age surfacing and alert-threshold documentation are not started — deliberately deferred alongside the API's own future `/metrics` endpoint (Phase 7), per Section 13's "potentially deferrable" list. | Claude (agent) |
+| 2026-09-02 | F, G, H | — | Not started. Next up: analytics query API + rollups (Workstream F), per the dependency map in `06-implementation-plan.md`. | — |
 
