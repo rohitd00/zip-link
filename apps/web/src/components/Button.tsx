@@ -11,7 +11,8 @@ interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, "cla
 }
 
 const VARIANT_CLASS_NAMES: Record<ButtonVariant, string> = {
-  primary: "bg-text text-white shadow-[var(--shadow-card)] hover:bg-accent active:bg-accent-hover",
+  // Section 7.2: "Accent fill, white text, clear hover/focus."
+  primary: "bg-accent text-white shadow-[var(--shadow-card)] hover:bg-accent-hover",
   secondary:
     "bg-surface text-text border border-border shadow-[var(--shadow-card)] hover:border-border-strong hover:bg-surface-subtle",
   text: "bg-transparent text-accent hover:text-accent-hover px-1",

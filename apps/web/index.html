@@ -4,6 +4,29 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Shortlink</title>
+    <script>
+      // Applies the saved (or system) theme before the page paints, so the
+      // dashboard never flashes the wrong theme for a frame while React
+      // loads. This is the only place the theme-storage key name is
+      // duplicated outside src/hooks/useTheme.ts — kept in sync manually,
+      // since a script this small isn't worth a build step to share it.
+      (function applyInitialTheme() {
+        try {
+          var storedPreference = window.localStorage.getItem("theme-preference");
+          var prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+          var shouldUseDark =
+            storedPreference === "dark" || (storedPreference !== "light" && prefersDark);
+
+          if (shouldUseDark) {
+            document.documentElement.classList.add("dark");
+          }
+        } catch (error) {
+          // localStorage or matchMedia can throw in a locked-down
+          // environment (e.g. a private-browsing edge case); the page
+          // still renders correctly in the light theme either way.
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

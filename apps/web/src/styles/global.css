@@ -1,41 +1,101 @@
 @import "tailwindcss";
 
 /*
- * Design tokens — "modern polished minimal" direction (Linear/Vercel/Stripe
- * inspired), documented in docs/04-design-specification.md Section 5. Still
- * restrained (no large gradients, no glassmorphism, no decorative
- * animation), but with more depth, a sharper accent, and tighter
- * typography than a purely flat minimal look.
+ * Design tokens per docs/04-design-specification.md Section 5 — Apple/
+ * Stripe/Vercel-inspired SaaS polish with first-class light AND dark
+ * themes, neither a filter over the other. Every color is a CSS custom
+ * property redefined per theme on `:root` (light) and `.dark` (dark); the
+ * `@theme inline` block below maps Tailwind's generated utility classes
+ * (bg-canvas, text-text-muted, etc.) onto those runtime variables instead
+ * of baking a fixed value at build time, which is what lets one class name
+ * resolve to a different color depending on the theme class on <html>.
  */
-@theme {
-  --color-canvas: #fbfbfc;
-  --color-surface: #ffffff;
-  --color-surface-subtle: #f4f4f6;
-  --color-text: #0f0f13;
-  --color-text-muted: #6b6b76;
-  --color-border: #e6e6ea;
-  --color-border-strong: #d4d4da;
-  --color-accent: #5b57e0;
-  --color-accent-hover: #4b47cc;
-  --color-accent-soft: #f0efff;
-  --color-success: #17803d;
-  --color-success-soft: #eefcf3;
-  --color-warning: #b45309;
-  --color-warning-soft: #fffbeb;
-  --color-danger: #c0281c;
-  --color-danger-soft: #fef2f1;
-  --color-info: #0369a1;
+@theme inline {
+  --color-canvas: var(--ui-canvas);
+  --color-surface: var(--ui-surface);
+  --color-surface-subtle: var(--ui-surface-subtle);
+  --color-text: var(--ui-text);
+  --color-text-muted: var(--ui-text-muted);
+  --color-border: var(--ui-border);
+  --color-border-strong: var(--ui-border-strong);
+  --color-accent: var(--ui-accent);
+  --color-accent-hover: var(--ui-accent-hover);
+  --color-accent-soft: var(--ui-accent-soft);
+  --color-success: var(--ui-success);
+  --color-success-soft: var(--ui-success-soft);
+  --color-warning: var(--ui-warning);
+  --color-warning-soft: var(--ui-warning-soft);
+  --color-danger: var(--ui-danger);
+  --color-danger-soft: var(--ui-danger-soft);
+  --color-info: var(--ui-info);
+  --color-info-soft: var(--ui-info-soft);
 
   --font-sans:
-    "Inter var", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
+    Inter, -apple-system, "SF Pro Text", BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
     sans-serif;
 
   --radius-card: 16px;
   --radius-control: 10px;
 
-  --shadow-card: 0 1px 2px 0 rgb(15 15 19 / 0.04), 0 1px 1px 0 rgb(15 15 19 / 0.03);
-  --shadow-card-hover: 0 4px 12px -2px rgb(15 15 19 / 0.08), 0 2px 4px -2px rgb(15 15 19 / 0.04);
-  --shadow-dialog: 0 20px 40px -8px rgb(15 15 19 / 0.18), 0 8px 16px -8px rgb(15 15 19 / 0.1);
+  --shadow-card: var(--ui-shadow-card);
+  --shadow-card-hover: var(--ui-shadow-card-hover);
+  --shadow-dialog: var(--ui-shadow-dialog);
+}
+
+/* Light theme (default). */
+:root {
+  --ui-canvas: #ffffff;
+  --ui-surface: #ffffff;
+  --ui-surface-subtle: #f2f2f5;
+  --ui-text: #0b0b0f;
+  --ui-text-muted: #6b6b76;
+  --ui-border: #e7e7ec;
+  --ui-border-strong: #d3d3da;
+  --ui-accent: #5546ff;
+  --ui-accent-hover: #4436e0;
+  --ui-accent-soft: #f0eeff;
+  --ui-success: #15803d;
+  --ui-success-soft: #eefcf3;
+  --ui-warning: #b45309;
+  --ui-warning-soft: #fffbeb;
+  --ui-danger: #c0281c;
+  --ui-danger-soft: #fef2f1;
+  --ui-info: #0369a1;
+  --ui-info-soft: #eff8ff;
+
+  /* Elevation in the light theme is a restrained shadow, per Section 5.4. */
+  --ui-shadow-card: 0 1px 2px 0 rgb(11 11 15 / 0.04), 0 1px 1px 0 rgb(11 11 15 / 0.03);
+  --ui-shadow-card-hover: 0 4px 12px -2px rgb(11 11 15 / 0.08), 0 2px 4px -2px rgb(11 11 15 / 0.04);
+  --ui-shadow-dialog: 0 20px 40px -8px rgb(11 11 15 / 0.18), 0 8px 16px -8px rgb(11 11 15 / 0.1);
+}
+
+/* Dark theme. Elevation comes from a lighter surface + hairline border, not
+   a shadow — shadows barely read on a near-black background, per Section
+   5.4 — so every shadow token collapses to `none` here rather than reusing
+   a lighter version of the light-theme shadow. */
+.dark {
+  --ui-canvas: #08090c;
+  --ui-surface: #111218;
+  --ui-surface-subtle: #17181f;
+  --ui-text: #f4f4f6;
+  --ui-text-muted: #93939d;
+  --ui-border: #212129;
+  --ui-border-strong: #2e2e38;
+  --ui-accent: #8177ff;
+  --ui-accent-hover: #948bff;
+  --ui-accent-soft: #1b1830;
+  --ui-success: #3dd16c;
+  --ui-success-soft: #10241a;
+  --ui-warning: #e0a430;
+  --ui-warning-soft: #2b1d06;
+  --ui-danger: #f0564a;
+  --ui-danger-soft: #2e1310;
+  --ui-info: #4ea8e0;
+  --ui-info-soft: #0e2430;
+
+  --ui-shadow-card: none;
+  --ui-shadow-card-hover: none;
+  --ui-shadow-dialog: none;
 }
 
 body {
@@ -46,8 +106,23 @@ body {
   letter-spacing: -0.011em;
 }
 
+/* Theme switching cross-fades color tokens rather than snapping instantly
+   — a usability transition, not decoration, per Section 5.4/16.5. Scoped
+   to the properties that actually change between themes so it never
+   interferes with layout, size, or position transitions elsewhere. */
+*,
+*::before,
+*::after {
+  transition:
+    background-color 160ms ease-out,
+    border-color 160ms ease-out,
+    color 160ms ease-out,
+    box-shadow 160ms ease-out;
+}
+
 /* Respect a visitor's reduced-motion preference everywhere, per
-   Section 5.4 of the design specification. */
+   Section 5.4 of the design specification. This also covers the theme
+   cross-fade above. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

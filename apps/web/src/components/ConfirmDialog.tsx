@@ -53,7 +53,12 @@ export function ConfirmDialog({
         event.preventDefault();
         onCancel();
       }}
-      className="rounded-[var(--radius-card)] border border-border bg-surface p-6 shadow-[var(--shadow-dialog)] backdrop:bg-text/30"
+      // The backdrop dim is intentionally a fixed dark overlay rather than
+      // a theme-color token: a translucent version of `color.text` would
+      // flip from dark (correct) in the light theme to a light haze
+      // (wrong) in the dark theme, since `color.text` itself flips
+      // between the two.
+      className="rounded-[var(--radius-card)] border border-border bg-surface p-6 shadow-[var(--shadow-dialog)] backdrop:bg-black/50"
       aria-labelledby="confirm-dialog-title"
       aria-describedby="confirm-dialog-description"
     >

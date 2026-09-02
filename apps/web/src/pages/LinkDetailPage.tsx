@@ -309,10 +309,16 @@ function AnalyticsContent({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <BreakdownCard title="Top referrers" icon={Share2} rows={analytics.referrers} />
-        <BreakdownCard title="Devices" icon={Monitor} rows={analytics.devices} />
-        <BreakdownCard title="Browsers" icon={Globe2} rows={analytics.browsers} />
+        <BreakdownCard
+          title="Devices & browsers"
+          icon={Monitor}
+          sections={[
+            { label: "Devices", rows: analytics.devices },
+            { label: "Browsers", rows: analytics.browsers },
+          ]}
+        />
         <BreakdownCard
           title="Geography"
           icon={Globe2}

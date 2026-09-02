@@ -3,11 +3,18 @@
 // there is no untrusted content to escape. See Section 11 of
 // design-specification.md for the exact required copy and layout intent.
 
+// Colors match docs/04-design-specification.md Section 5.1's light- and
+// dark-theme token values exactly (Signal Indigo accent, etc.), even
+// though this static page has no theme toggle of its own — it follows the
+// visitor's OS-level preference only, via prefers-color-scheme, matching
+// Section 3's "theme parity" principle for the one screen in the product
+// that a signed-out visitor (the person who clicked the short link) ever
+// sees.
 const SHARED_PAGE_STYLES = `
   body {
     font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    background-color: #FBFBFC;
-    color: #0F0F13;
+    background-color: #FFFFFF;
+    color: #0B0B0F;
     letter-spacing: -0.011em;
     display: flex;
     min-height: 100vh;
@@ -33,9 +40,21 @@ const SHARED_PAGE_STYLES = `
   a {
     display: inline-block;
     margin-top: 20px;
-    color: #5B57E0;
+    color: #5546FF;
     text-decoration: none;
     font-weight: 600;
+  }
+  @media (prefers-color-scheme: dark) {
+    body {
+      background-color: #08090C;
+      color: #F4F4F6;
+    }
+    p {
+      color: #93939D;
+    }
+    a {
+      color: #8177FF;
+    }
   }
 `;
 

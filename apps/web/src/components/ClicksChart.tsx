@@ -13,7 +13,18 @@ export interface TimelinePoint {
   clickCount: number;
 }
 
-const CHART_ACCENT_COLOR = "#5b57e0";
+/*
+ * Every color below is a CSS custom property (styles/global.css), never a
+ * fixed hex value, so the chart re-colors correctly when the theme toggle
+ * switches between light and dark — Section 3's "theme parity" principle
+ * and Section 18's "chart... colors use the dark-theme token values, not
+ * the light-theme values at reduced opacity" apply to this chart too.
+ * Recharts writes these straight through to SVG presentation attributes,
+ * which resolve `var(...)` the same way any other CSS property does.
+ */
+const CHART_ACCENT_COLOR = "var(--color-accent)";
+const CHART_GRID_COLOR = "var(--color-border)";
+const CHART_MUTED_TEXT_COLOR = "var(--color-text-muted)";
 
 /**
  * The clicks-over-time chart, plus a collapsible accessible table of the
@@ -45,17 +56,17 @@ export function ClicksChart({
                 <stop offset="100%" stopColor={CHART_ACCENT_COLOR} stopOpacity={0} />
               </linearGradient>
             </defs>
-            <CartesianGrid vertical={false} stroke="#e6e6ea" />
+            <CartesianGrid vertical={false} stroke={CHART_GRID_COLOR} />
             <XAxis
               dataKey="label"
-              tick={{ fontSize: 12, fill: "#6b6b76" }}
+              tick={{ fontSize: 12, fill: CHART_MUTED_TEXT_COLOR }}
               tickLine={false}
-              axisLine={{ stroke: "#e6e6ea" }}
+              axisLine={{ stroke: CHART_GRID_COLOR }}
               minTickGap={24}
             />
             <YAxis
               allowDecimals={false}
-              tick={{ fontSize: 12, fill: "#6b6b76" }}
+              tick={{ fontSize: 12, fill: CHART_MUTED_TEXT_COLOR }}
               tickLine={false}
               axisLine={false}
               width={32}
@@ -64,15 +75,15 @@ export function ClicksChart({
               formatter={(value) => [Number(value).toLocaleString(), "Clicks"]}
               contentStyle={{
                 borderRadius: 10,
-                border: "1px solid #0f0f13",
-                backgroundColor: "#0f0f13",
-                color: "#ffffff",
+                border: "1px solid var(--color-border)",
+                backgroundColor: "var(--color-surface)",
+                color: "var(--color-text)",
                 fontSize: 13,
-                boxShadow: "0 8px 16px -4px rgb(15 15 19 / 0.25)",
+                boxShadow: "var(--shadow-dialog)",
               }}
-              itemStyle={{ color: "#ffffff" }}
-              labelStyle={{ color: "#a1a1aa" }}
-              cursor={{ stroke: "#e6e6ea", strokeWidth: 1 }}
+              itemStyle={{ color: "var(--color-text)" }}
+              labelStyle={{ color: "var(--color-text-muted)" }}
+              cursor={{ stroke: CHART_GRID_COLOR, strokeWidth: 1 }}
             />
             <Area
               type="monotone"

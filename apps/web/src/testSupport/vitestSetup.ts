@@ -34,3 +34,25 @@ if (
     this.dispatchEvent(new Event("close"));
   };
 }
+
+// jsdom does not implement window.matchMedia at all. useTheme
+// (src/hooks/useTheme.ts) calls it to resolve the "system" theme
+// preference and to listen for OS theme changes, so any test that mounts
+// ThemeToggle (or AppShell, which renders it) needs this polyfill. It
+// always reports "no preference matched" (matches: false); tests that
+// need to simulate a specific OS preference stub window.matchMedia
+// themselves for that one test.
+if (typeof window !== "undefined" && typeof window.matchMedia !== "function") {
+  window.matchMedia = function matchMedia(query: string): MediaQueryList {
+    return {
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    } as MediaQueryList;
+  };
+}
