@@ -189,13 +189,34 @@ export function buildApiApp(options: BuildApiAppOptions): Express {
     // only a hash, never the address, so this can be compared against a
     // hash computed locally from a known IP without exposing either one.
     const ipHashSecret = process.env.IP_HASH_SECRET;
-    const resolvedIpHash =
-      resolvedIp === null || ipHashSecret === undefined
+    const hashOf = (value: string): string | null =>
+      ipHashSecret === undefined
         ? null
-        : crypto.createHmac("sha256", ipHashSecret).update(resolvedIp).digest("hex");
+        : crypto.createHmac("sha256", ipHashSecret).update(value.trim()).digest("hex");
+    const resolvedIpHash = resolvedIp === null ? null : hashOf(resolvedIp);
+    const everyHopHash =
+      headerValue === null ? [] : headerValue.split(",").map((entry) => hashOf(entry));
+    const candidateHeaderHashes = {
+      "x-real-ip": headerToHash(request.headers["x-real-ip"]),
+      "cf-connecting-ip": headerToHash(request.headers["cf-connecting-ip"]),
+      "true-client-ip": headerToHash(request.headers["true-client-ip"]),
+      "fly-client-ip": headerToHash(request.headers["fly-client-ip"]),
+      "x-client-ip": headerToHash(request.headers["x-client-ip"]),
+    };
+
+    function headerToHash(value: string | string[] | undefined): string | null {
+      if (value === undefined) return null;
+      const stringValue = Array.isArray(value) ? value[0] : value;
+      return stringValue === undefined ? null : hashOf(stringValue);
+    }
 
     response.json({
       xForwardedForHopCount: hopCount,
+      everyHopHash,
+      candidateHeaderHashes,
+      headerNamesPresent: Object.keys(request.headers).filter((name) =>
+        name.toLowerCase().includes("ip"),
+      ),
       resolvedIpIsPrivateOrUnroutable: isPrivateOrUnroutable,
       trustProxyHopsConfigured: options.trustProxyHops,
       resolvedIpHash,
