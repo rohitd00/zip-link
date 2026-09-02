@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import cookieParser from "cookie-parser";
 import type { Queue } from "bullmq";
 import express, { type Express } from "express";
@@ -184,10 +185,20 @@ export function buildApiApp(options: BuildApiAppOptions): Express {
       resolvedIp === null ||
       /^(10\.|127\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|::1$|fc|fd|fe80:)/.test(resolvedIp);
 
+    // Same HMAC construction as ipHasher.ts's hashClientIpAddress — reveals
+    // only a hash, never the address, so this can be compared against a
+    // hash computed locally from a known IP without exposing either one.
+    const ipHashSecret = process.env.IP_HASH_SECRET;
+    const resolvedIpHash =
+      resolvedIp === null || ipHashSecret === undefined
+        ? null
+        : crypto.createHmac("sha256", ipHashSecret).update(resolvedIp).digest("hex");
+
     response.json({
       xForwardedForHopCount: hopCount,
       resolvedIpIsPrivateOrUnroutable: isPrivateOrUnroutable,
       trustProxyHopsConfigured: options.trustProxyHops,
+      resolvedIpHash,
     });
   });
 
