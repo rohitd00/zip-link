@@ -23,6 +23,7 @@ function startApiServer(): void {
     createRateLimitMaxRequests: config.createRateLimitMaxRequests,
     createRateLimitWindowSeconds: config.createRateLimitWindowSeconds,
     isProductionEnvironment: config.nodeEnvironment === "production",
+    trustProxyHops: config.trustProxyHops,
   });
 
   const server = app.listen(config.port, () => {

@@ -54,11 +54,12 @@ export class RedirectController {
       occurredAt: new Date(),
       referrer: request.headers.referer ?? null,
       userAgent: request.headers["user-agent"] ?? null,
-      // No reverse-proxy trust is configured, so request.ip is the direct
-      // socket address, not an attacker-controllable header. A production
-      // deployment behind a real proxy must configure Express's
-      // "trust proxy" setting deliberately before relying on this value,
-      // per Rule S-02.
+      // By default (TRUST_PROXY_HOPS=0) request.ip is the direct socket
+      // address, not an attacker-controllable header — see app.ts's
+      // `app.set("trust proxy", ...)` comment for why that matters, per
+      // Rule S-02. A deployment behind a real reverse proxy sets
+      // TRUST_PROXY_HOPS to the actual number of hops so this correctly
+      // becomes the real visitor's address instead of the proxy's own.
       clientIpAddress: request.ip ?? null,
     });
 

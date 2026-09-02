@@ -21,6 +21,7 @@ export interface ApiEnvironmentConfig {
   createRateLimitMaxRequests: number;
   createRateLimitWindowSeconds: number;
   logLevel: string;
+  trustProxyHops: number;
 }
 
 class MissingEnvironmentVariableError extends Error {
@@ -63,6 +64,34 @@ function readRequiredPositiveIntegerVariable(variableName: string, explanation: 
     throw new MissingEnvironmentVariableError(
       variableName,
       `${explanation} It must be a positive whole number, but received "${rawValue}".`,
+    );
+  }
+
+  return parsedValue;
+}
+
+// Unlike the other numeric settings, this one is optional and defaults to
+// 0 (meaning: trust no proxy, use the raw socket address). It is only ever
+// non-zero in a real deployment behind a reverse proxy/load balancer — see
+// the long comment on trustProxyHops's usage in app.ts for why this must
+// never be turned on somewhere requests arrive directly.
+function readOptionalNonNegativeIntegerVariable(
+  variableName: string,
+  defaultValue: number,
+  explanation: string,
+): number {
+  const rawValue = process.env[variableName];
+
+  if (rawValue === undefined || rawValue.trim().length === 0) {
+    return defaultValue;
+  }
+
+  const parsedValue = Number.parseInt(rawValue, 10);
+
+  if (Number.isNaN(parsedValue) || parsedValue < 0) {
+    throw new MissingEnvironmentVariableError(
+      variableName,
+      `${explanation} It must be zero or a positive whole number, but received "${rawValue}".`,
     );
   }
 
@@ -120,6 +149,15 @@ export function loadApiEnvironmentConfig(): ApiEnvironmentConfig {
 
   const logLevel = readOptionalStringVariable("LOG_LEVEL", "info");
 
+  const trustProxyHops = readOptionalNonNegativeIntegerVariable(
+    "TRUST_PROXY_HOPS",
+    0,
+    "Set TRUST_PROXY_HOPS to the number of reverse proxies/load balancers in front of this API " +
+      "(for example 1 on most platform-as-a-service hosts), so request.ip reads the real visitor " +
+      "address from X-Forwarded-For instead of the proxy's own address. Leave unset (0) when " +
+      "nothing sits in front of this process, such as local development.",
+  );
+
   return {
     nodeEnvironment,
     port,
@@ -131,5 +169,6 @@ export function loadApiEnvironmentConfig(): ApiEnvironmentConfig {
     createRateLimitMaxRequests,
     createRateLimitWindowSeconds,
     logLevel,
+    trustProxyHops,
   };
 }

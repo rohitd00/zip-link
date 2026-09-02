@@ -223,7 +223,10 @@ docker compose up -d --build
 
 Full setup instructions (native vs. Docker PostgreSQL, environment variables, first-run
 migrations, verifying the pipeline end to end) are in the
-**[technical reference](docs/09-technical-reference.md#local-setup)**.
+**[technical reference](docs/09-technical-reference.md#local-setup)** — which also has a
+[free-tier deployment guide](docs/09-technical-reference.md#deploying-on-a-free-tier)
+(Vercel + Render + Neon + Upstash) if you want this running somewhere other than your
+own machine.
 
 ## Documentation
 

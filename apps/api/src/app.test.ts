@@ -37,6 +37,7 @@ beforeAll(() => {
     createRateLimitMaxRequests: 1000,
     createRateLimitWindowSeconds: 900,
     isProductionEnvironment: false,
+    trustProxyHops: 0,
   });
 });
 

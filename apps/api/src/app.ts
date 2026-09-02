@@ -40,6 +40,7 @@ export interface BuildApiAppOptions {
   createRateLimitMaxRequests: number;
   createRateLimitWindowSeconds: number;
   isProductionEnvironment: boolean;
+  trustProxyHops: number;
 }
 
 /**
@@ -85,6 +86,20 @@ export function buildApiApp(options: BuildApiAppOptions): Express {
   const redirectController = new RedirectController(redirectService, clickEventPublisher);
 
   const app = express();
+
+  // Controls whether Express reads the real visitor IP from the
+  // X-Forwarded-For header (set by a reverse proxy/load balancer in front
+  // of this process) instead of the raw socket address. This must stay 0
+  // wherever requests arrive directly — local development, and
+  // docker-compose's own network — because X-Forwarded-For is just an
+  // ordinary header: with nothing in front of this process to strip and
+  // re-set it, any caller could put an arbitrary value in it and spoof
+  // their IP. It should be set to the real number of proxy hops (usually
+  // 1) only in a deployment that actually has one, so that
+  // RedirectController's use of request.ip (for the analytics IP hash and
+  // the creation rate limiter) reflects the real visitor rather than every
+  // request appearing to come from the load balancer's own address.
+  app.set("trust proxy", options.trustProxyHops);
 
   app.use(helmet());
   app.use(requestIdMiddleware);

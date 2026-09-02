@@ -379,6 +379,63 @@ volumes, which deletes all data — see [Backup, restore, and
 retention](#backup-restore-and-retention) before doing that against anything you care
 about).
 
+## Deploying on a free tier
+
+None of this project's pieces need to live on the same platform, and there is a
+genuinely-free combination that covers all of them:
+
+| Piece | Suggested free host | Why |
+| --- | --- | --- |
+| Dashboard (`apps/web`) | Vercel | Static hosting, never sleeps (no cold start), and supports the rewrite trick below |
+| API (`apps/api`) | Render (free Web Service) | Runs Node directly; free tier sleeps after ~15 minutes idle (30–60s cold start on the next request — an honest, acceptable trade-off for a free demo) |
+| Analytics worker (`apps/worker`) | Render (free Background Worker) | A distinct service type built for a long-lived process with no HTTP endpoint, unlike serverless-only platforms |
+| PostgreSQL | [Neon](https://neon.tech) | A genuinely free tier with no forced expiry |
+| Redis | [Upstash](https://upstash.com) | Free tier, and — importantly — speaks the real Redis protocol over a normal connection (use the `rediss://` connection string it gives you, not its separate REST API), so BullMQ works against it unmodified |
+
+### Two required changes for a split-host deployment like this
+
+1. **`TRUST_PROXY_HOPS=1`** on the Render API and worker services (leave it at `0`
+   everywhere else — see [Privacy and security behavior](#privacy-and-security-behavior-implemented-so-far)
+   above). Render puts exactly one proxy in front of your app; without this set, every
+   visitor's analytics would be hashed and geo-located as if they were Render's own load
+   balancer, not the real visitor.
+2. **Same-origin routing between the dashboard and the API.** The dashboard and API are on
+   two different domains once split across Vercel and Render, and the owner-identity
+   cookie is `SameSite=Lax` — meaning the browser will not send it on a request to a
+   different domain. Locally and in Docker, this is solved by a proxy (Vite's dev proxy;
+   nginx in `apps/web/nginx.conf`) that makes `/api` and `/health` requests look like they
+   come from the same origin as the dashboard. On Vercel, the equivalent is the
+   `rewrites` block in the repository-root `vercel.json`:
+
+   ```json
+   {
+     "rewrites": [
+       { "source": "/api/:path*", "destination": "https://YOUR-API.onrender.com/api/:path*" },
+       { "source": "/health/:path*", "destination": "https://YOUR-API.onrender.com/health/:path*" }
+     ]
+   }
+   ```
+
+   Replace the placeholder with your actual Render API URL once it's deployed. Vercel's
+   edge network then transparently forwards those two path prefixes to the real API,
+   while the browser only ever sees one origin — exactly the property `SameSite=Lax`
+   depends on.
+
+### Rough order of steps
+
+1. Create the Neon project; run `npm run migrate:up` against its connection string once
+   (from your own machine) to create the schema.
+2. Create the Upstash Redis database; copy its `rediss://` connection string.
+3. Deploy `apps/api` to Render as a Web Service, and `apps/worker` to Render as a
+   Background Worker — both pointed at the same Neon `DATABASE_URL` and Upstash
+   `REDIS_URL`, with real `IP_HASH_SECRET`/`OWNER_COOKIE_SECRET` values, `NODE_ENV=production`,
+   and `TRUST_PROXY_HOPS=1`.
+4. Deploy `apps/web` to Vercel (build command `npm run build:web`, output directory
+   `apps/web/dist` — both already set in `vercel.json`), after filling in the real Render
+   API URL in that file's `rewrites` block.
+5. Set `PUBLIC_BASE_URL` on the Render API to whatever domain visitors will actually use
+   for short links.
+
 ## Running quality checks
 
 ```bash
@@ -564,10 +621,15 @@ are deliberately deferred, for reasons specific to each:
   `apps/web/nginx.conf`'s production proxy), so a script on another origin cannot make an
   authenticated JSON request here even if it tried. `helmet()` sets the usual security
   headers, and `express.json()` is capped at `10kb` per request body.
-- Express's `trust proxy` setting is deliberately left unconfigured: `request.ip` in
-  `RedirectController` is the direct socket address, not an attacker-controllable header.
-  A real deployment behind a reverse proxy/load balancer must configure this explicitly
-  before trusting `X-Forwarded-For` — see the comment at the `request.ip` usage site.
+- Express's `trust proxy` setting is controlled by `TRUST_PROXY_HOPS` (default `0`, meaning
+  untrusted — `request.ip` is the direct socket address, not an attacker-controllable
+  header). Leave it at `0` anywhere requests arrive directly (local development,
+  docker-compose); set it to the real number of proxy hops (usually `1`) only in a
+  deployment that actually sits behind one, such as Render, so `RedirectController`'s use
+  of `request.ip` (the analytics IP hash, the creation rate limiter) reflects the real
+  visitor instead of the proxy's own address. See `app.ts`'s `app.set("trust proxy", ...)`
+  comment for the full reasoning, and `trustProxy.test.ts` for proof of both directions
+  (a spoofed header is ignored at `0`, honored at `1`).
 - Cross-owner management requests (reading or deleting another owner's link) return a
   generic `404`, never revealing that the code belongs to someone else.
 - All SQL is parameterized; nothing user-supplied is concatenated into a query.
