@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import cookieParser from "cookie-parser";
 import type { Queue } from "bullmq";
 import express, { type Express } from "express";
@@ -172,56 +171,6 @@ export function buildApiApp(options: BuildApiAppOptions): Express {
 
   app.use(createHealthRoutes(healthController));
   app.use(createMetricsRoutes(metricsController));
-
-  // TEMPORARY diagnostic for the TRUST_PROXY_HOPS deployment issue — never
-  // exposes the raw IP itself (hop count and a private-range boolean only),
-  // to be removed once the correct hop count for this deployment is found.
-  app.get("/debug/proxy-info", (request, response) => {
-    const rawHeader = request.headers["x-forwarded-for"];
-    const headerValue = Array.isArray(rawHeader) ? rawHeader.join(",") : (rawHeader ?? null);
-    const hopCount = headerValue === null ? 0 : headerValue.split(",").length;
-    const resolvedIp = request.ip ?? null;
-    const isPrivateOrUnroutable =
-      resolvedIp === null ||
-      /^(10\.|127\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|::1$|fc|fd|fe80:)/.test(resolvedIp);
-
-    // Same HMAC construction as ipHasher.ts's hashClientIpAddress — reveals
-    // only a hash, never the address, so this can be compared against a
-    // hash computed locally from a known IP without exposing either one.
-    const ipHashSecret = process.env.IP_HASH_SECRET;
-    const hashOf = (value: string): string | null =>
-      ipHashSecret === undefined
-        ? null
-        : crypto.createHmac("sha256", ipHashSecret).update(value.trim()).digest("hex");
-    const resolvedIpHash = resolvedIp === null ? null : hashOf(resolvedIp);
-    const everyHopHash =
-      headerValue === null ? [] : headerValue.split(",").map((entry) => hashOf(entry));
-    const candidateHeaderHashes = {
-      "x-real-ip": headerToHash(request.headers["x-real-ip"]),
-      "cf-connecting-ip": headerToHash(request.headers["cf-connecting-ip"]),
-      "true-client-ip": headerToHash(request.headers["true-client-ip"]),
-      "fly-client-ip": headerToHash(request.headers["fly-client-ip"]),
-      "x-client-ip": headerToHash(request.headers["x-client-ip"]),
-    };
-
-    function headerToHash(value: string | string[] | undefined): string | null {
-      if (value === undefined) return null;
-      const stringValue = Array.isArray(value) ? value[0] : value;
-      return stringValue === undefined ? null : hashOf(stringValue);
-    }
-
-    response.json({
-      xForwardedForHopCount: hopCount,
-      everyHopHash,
-      candidateHeaderHashes,
-      headerNamesPresent: Object.keys(request.headers).filter((name) =>
-        name.toLowerCase().includes("ip"),
-      ),
-      resolvedIpIsPrivateOrUnroutable: isPrivateOrUnroutable,
-      trustProxyHopsConfigured: options.trustProxyHops,
-      resolvedIpHash,
-    });
-  });
 
   // Session lookup runs before owner-context resolution, since a signed-in
   // user's identity (if any) takes priority over the anonymous cookie —
