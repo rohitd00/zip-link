@@ -13,7 +13,7 @@ export interface TimelinePoint {
   clickCount: number;
 }
 
-const CHART_ACCENT_COLOR = "#4f46e5";
+const CHART_ACCENT_COLOR = "#5b57e0";
 
 /**
  * The clicks-over-time chart, plus a collapsible accessible table of the
@@ -45,24 +45,34 @@ export function ClicksChart({
                 <stop offset="100%" stopColor={CHART_ACCENT_COLOR} stopOpacity={0} />
               </linearGradient>
             </defs>
-            <CartesianGrid vertical={false} stroke="#E7E5E4" />
+            <CartesianGrid vertical={false} stroke="#e6e6ea" />
             <XAxis
               dataKey="label"
-              tick={{ fontSize: 12, fill: "#78716C" }}
+              tick={{ fontSize: 12, fill: "#6b6b76" }}
               tickLine={false}
-              axisLine={{ stroke: "#E7E5E4" }}
+              axisLine={{ stroke: "#e6e6ea" }}
               minTickGap={24}
             />
             <YAxis
               allowDecimals={false}
-              tick={{ fontSize: 12, fill: "#78716C" }}
+              tick={{ fontSize: 12, fill: "#6b6b76" }}
               tickLine={false}
               axisLine={false}
               width={32}
             />
             <Tooltip
               formatter={(value) => [Number(value).toLocaleString(), "Clicks"]}
-              contentStyle={{ borderRadius: 8, borderColor: "#E7E5E4", fontSize: 13 }}
+              contentStyle={{
+                borderRadius: 10,
+                border: "1px solid #0f0f13",
+                backgroundColor: "#0f0f13",
+                color: "#ffffff",
+                fontSize: 13,
+                boxShadow: "0 8px 16px -4px rgb(15 15 19 / 0.25)",
+              }}
+              itemStyle={{ color: "#ffffff" }}
+              labelStyle={{ color: "#a1a1aa" }}
+              cursor={{ stroke: "#e6e6ea", strokeWidth: 1 }}
             />
             <Area
               type="monotone"

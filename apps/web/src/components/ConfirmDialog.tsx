@@ -53,14 +53,14 @@ export function ConfirmDialog({
         event.preventDefault();
         onCancel();
       }}
-      className="rounded-[var(--radius-card)] border border-border bg-surface p-6 shadow-lg backdrop:bg-black/40"
+      className="rounded-[var(--radius-card)] border border-border bg-surface p-6 shadow-[var(--shadow-dialog)] backdrop:bg-text/30"
       aria-labelledby="confirm-dialog-title"
       aria-describedby="confirm-dialog-description"
     >
-      <h2 id="confirm-dialog-title" className="text-base font-semibold text-text">
+      <h2 id="confirm-dialog-title" className="text-base font-semibold tracking-tight text-text">
         {title}
       </h2>
-      <p id="confirm-dialog-description" className="mt-2 text-sm text-text-muted">
+      <p id="confirm-dialog-description" className="mt-2 text-sm leading-relaxed text-text-muted">
         {description}
       </p>
       <div className="mt-6 flex justify-end gap-3">
@@ -68,7 +68,7 @@ export function ConfirmDialog({
           Cancel
         </Button>
         <Button
-          variant="destructive"
+          variant="destructive-solid"
           onClick={onConfirm}
           isLoading={isConfirming}
           loadingLabel="Deleting…"

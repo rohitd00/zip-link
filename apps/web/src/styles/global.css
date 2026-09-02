@@ -1,45 +1,49 @@
 @import "tailwindcss";
 
 /*
- * Design tokens from docs/04-design-specification.md Section 5. Tailwind
- * v4 turns each --color-* variable here into matching utility classes
- * automatically (bg-canvas, text-text-muted, border-border, and so on),
- * so components reference these tokens by name instead of raw hex values.
+ * Design tokens — "modern polished minimal" direction (Linear/Vercel/Stripe
+ * inspired), documented in docs/04-design-specification.md Section 5. Still
+ * restrained (no large gradients, no glassmorphism, no decorative
+ * animation), but with more depth, a sharper accent, and tighter
+ * typography than a purely flat minimal look.
  */
 @theme {
-  --color-canvas: #fafaf9;
+  --color-canvas: #fbfbfc;
   --color-surface: #ffffff;
-  --color-surface-subtle: #f5f5f4;
-  --color-text: #1c1917;
-  --color-text-muted: #78716c;
-  --color-border: #e7e5e4;
-  --color-accent: #4f46e5;
-  --color-accent-hover: #4338ca;
-  --color-accent-soft: #eef2ff;
-  --color-success: #15803d;
-  --color-success-soft: #f0fdf4;
+  --color-surface-subtle: #f4f4f6;
+  --color-text: #0f0f13;
+  --color-text-muted: #6b6b76;
+  --color-border: #e6e6ea;
+  --color-border-strong: #d4d4da;
+  --color-accent: #5b57e0;
+  --color-accent-hover: #4b47cc;
+  --color-accent-soft: #f0efff;
+  --color-success: #17803d;
+  --color-success-soft: #eefcf3;
   --color-warning: #b45309;
   --color-warning-soft: #fffbeb;
-  --color-danger: #b91c1c;
-  --color-danger-soft: #fef2f2;
+  --color-danger: #c0281c;
+  --color-danger-soft: #fef2f1;
   --color-info: #0369a1;
 
-  /*
-   * A system-font stack rather than a Google Fonts import: it avoids an
-   * external network dependency and a render-blocking font request, and
-   * looks close enough to Inter on every major platform.
-   */
   --font-sans:
-    Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    "Inter var", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
+    sans-serif;
 
-  --radius-card: 12px;
-  --radius-control: 8px;
+  --radius-card: 16px;
+  --radius-control: 10px;
+
+  --shadow-card: 0 1px 2px 0 rgb(15 15 19 / 0.04), 0 1px 1px 0 rgb(15 15 19 / 0.03);
+  --shadow-card-hover: 0 4px 12px -2px rgb(15 15 19 / 0.08), 0 2px 4px -2px rgb(15 15 19 / 0.04);
+  --shadow-dialog: 0 20px 40px -8px rgb(15 15 19 / 0.18), 0 8px 16px -8px rgb(15 15 19 / 0.1);
 }
 
 body {
   background-color: var(--color-canvas);
   color: var(--color-text);
   font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  letter-spacing: -0.011em;
 }
 
 /* Respect a visitor's reduced-motion preference everywhere, per

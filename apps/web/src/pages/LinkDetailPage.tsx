@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { ArrowLeft, Globe2, LineChart, Monitor, MousePointerClick, Share2 } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { apiClient } from "../api/apiClient";
 import { BreakdownCard } from "../components/BreakdownCard";
@@ -100,7 +101,7 @@ export function LinkDetailPage() {
 
   if (overviewState.status === "not_found") {
     return (
-      <div className="rounded-[var(--radius-card)] border border-border bg-surface p-8 text-center">
+      <div className="rounded-[var(--radius-card)] border border-border bg-surface p-8 text-center shadow-[var(--shadow-card)]">
         <p className="text-sm font-semibold text-text">This link is unavailable</p>
         <p className="mt-1 text-sm text-text-muted">
           It may have been removed, or you may not have access to it.
@@ -122,12 +123,16 @@ export function LinkDetailPage() {
   return (
     <div className="flex flex-col gap-8">
       <div>
-        <Link to="/" className="text-sm font-medium text-text-muted hover:text-text">
-          ← All links
+        <Link
+          to="/"
+          className="inline-flex items-center gap-1 text-sm font-medium text-text-muted transition-colors hover:text-text"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
+          All links
         </Link>
 
         <div className="mt-3 flex flex-wrap items-center gap-3">
-          <h1 className="break-all text-xl font-bold text-text">{link.shortUrl}</h1>
+          <h1 className="break-all text-xl font-bold tracking-tight text-text">{link.shortUrl}</h1>
           <CopyButton valueToCopy={link.shortUrl} />
           <StatusBadge status={isExpired ? "expired" : "active"} />
         </div>
@@ -150,7 +155,7 @@ export function LinkDetailPage() {
 
       <div>
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-base font-semibold text-text">Analytics</h2>
+          <h2 className="text-[15px] font-semibold tracking-tight text-text">Analytics</h2>
           <RangeSelector selectedPreset={rangePreset} onSelectPreset={setRangePreset} />
         </div>
         <p className="mt-1 text-xs text-text-muted">Recent clicks may take a moment to appear.</p>
@@ -163,7 +168,7 @@ export function LinkDetailPage() {
                 type="datetime-local"
                 value={customFrom}
                 onChange={(event) => setCustomFrom(event.target.value)}
-                className="min-h-11 rounded-[var(--radius-control)] border border-border px-3 py-2 text-sm"
+                className="min-h-11 rounded-[var(--radius-control)] border border-border px-3 py-2 text-sm shadow-[var(--shadow-card)] outline-none focus:border-accent focus:ring-[3px] focus:ring-accent-soft"
               />
             </label>
             <label className="flex flex-col gap-1 text-sm">
@@ -172,7 +177,7 @@ export function LinkDetailPage() {
                 type="datetime-local"
                 value={customTo}
                 onChange={(event) => setCustomTo(event.target.value)}
-                className="min-h-11 rounded-[var(--radius-control)] border border-border px-3 py-2 text-sm"
+                className="min-h-11 rounded-[var(--radius-control)] border border-border px-3 py-2 text-sm shadow-[var(--shadow-card)] outline-none focus:border-accent focus:ring-[3px] focus:ring-accent-soft"
               />
             </label>
           </div>
@@ -197,7 +202,7 @@ export function LinkDetailPage() {
         </div>
       </div>
 
-      <div className="border-t border-border pt-6">
+      <div className="rounded-[var(--radius-card)] border border-danger/25 bg-danger-soft/40 p-5">
         <h2 className="text-sm font-semibold text-danger">Delete link</h2>
         <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-text-muted">This stops the short URL from redirecting.</p>
@@ -228,7 +233,7 @@ function AnalyticsContent({
 }) {
   if (analytics.totalClicks === 0) {
     return (
-      <div className="rounded-[var(--radius-card)] border border-border bg-surface p-8 text-center">
+      <div className="rounded-[var(--radius-card)] border border-border bg-surface p-8 text-center shadow-[var(--shadow-card)]">
         <p className="text-sm font-semibold text-text">No clicks in this period</p>
         <p className="mt-1 text-sm text-text-muted">
           When someone opens this short link, their visit will appear here shortly.
@@ -243,12 +248,16 @@ function AnalyticsContent({
         <MetricCard
           label="Total clicks"
           value={analytics.totalClicks}
+          icon={MousePointerClick}
           supportingText={`${new Date(analytics.range.from).toLocaleDateString()} – ${new Date(
             analytics.range.to,
           ).toLocaleDateString()}`}
         />
-        <div className="rounded-[var(--radius-card)] border border-border bg-surface p-6">
-          <h3 className="text-sm font-semibold text-text">Clicks over time</h3>
+        <div className="rounded-[var(--radius-card)] border border-border bg-surface p-6 shadow-[var(--shadow-card)]">
+          <div className="flex items-center gap-2 text-text">
+            <LineChart className="h-4 w-4 text-text-muted" aria-hidden="true" />
+            <h3 className="text-sm font-semibold">Clicks over time</h3>
+          </div>
           <div className="mt-3">
             <ClicksChart timeline={analytics.timeline} timezone={analytics.range.timezone} />
           </div>
@@ -256,11 +265,12 @@ function AnalyticsContent({
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <BreakdownCard title="Top referrers" rows={analytics.referrers} />
-        <BreakdownCard title="Devices" rows={analytics.devices} />
-        <BreakdownCard title="Browsers" rows={analytics.browsers} />
+        <BreakdownCard title="Top referrers" icon={Share2} rows={analytics.referrers} />
+        <BreakdownCard title="Devices" icon={Monitor} rows={analytics.devices} />
+        <BreakdownCard title="Browsers" icon={Globe2} rows={analytics.browsers} />
         <BreakdownCard
           title="Geography"
+          icon={Globe2}
           rows={analytics.geography.map((row) => ({
             name: row.city === null ? row.country : `${row.city}, ${row.country}`,
             clickCount: row.clickCount,

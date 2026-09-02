@@ -28,16 +28,17 @@ export function TextField({ label, helperText, errorMessage, ...inputProps }: Te
 
   return (
     <div className="flex flex-col gap-1.5">
-      <label htmlFor={inputId} className="text-sm font-medium text-text">
+      <label htmlFor={inputId} className="text-[13px] font-medium text-text">
         {label}
       </label>
       <input
         id={inputId}
         aria-invalid={hasError}
         aria-describedby={describedByIds.length > 0 ? describedByIds : undefined}
-        className={`min-h-11 rounded-[var(--radius-control)] border bg-surface px-3 py-2 text-sm text-text
-          placeholder:text-text-muted focus-visible:outline focus-visible:outline-2
-          focus-visible:outline-offset-1 focus-visible:outline-accent
+        className={`min-h-11 rounded-[var(--radius-control)] border bg-surface px-3.5 py-2 text-sm text-text
+          shadow-[var(--shadow-card)] outline-none transition-shadow duration-150
+          placeholder:text-text-muted
+          focus:border-accent focus:ring-[3px] focus:ring-accent-soft
           ${hasError ? "border-danger" : "border-border"}`}
         {...inputProps}
       />

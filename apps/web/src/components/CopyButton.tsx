@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Check, Copy } from "lucide-react";
 import { Button } from "./Button";
 
 const COPIED_LABEL_DURATION_MILLISECONDS = 2000;
@@ -27,6 +28,11 @@ export function CopyButton({ valueToCopy }: { valueToCopy: string }) {
 
   return (
     <Button variant="secondary" onClick={handleCopyClick}>
+      {copyState === "copied" ? (
+        <Check className="h-3.5 w-3.5 text-success" aria-hidden="true" />
+      ) : (
+        <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+      )}
       {buttonLabel}
     </Button>
   );

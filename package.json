@@ -27,6 +27,7 @@
     "geoip-lite": "^2.0.3",
     "helmet": "^8.0.0",
     "ioredis": "^6.0.0",
+    "lucide-react": "^1.39.0",
     "pg": "^8.13.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",

@@ -5,9 +5,10 @@
 
 const SHARED_PAGE_STYLES = `
   body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    background-color: #FAFAF9;
-    color: #1C1917;
+    font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background-color: #FBFBFC;
+    color: #0F0F13;
+    letter-spacing: -0.011em;
     display: flex;
     min-height: 100vh;
     align-items: center;
@@ -21,16 +22,18 @@ const SHARED_PAGE_STYLES = `
   }
   h1 {
     font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
     margin-bottom: 8px;
   }
   p {
-    color: #78716C;
+    color: #6B6B76;
     line-height: 1.5;
   }
   a {
     display: inline-block;
     margin-top: 20px;
-    color: #4F46E5;
+    color: #5B57E0;
     text-decoration: none;
     font-weight: 600;
   }

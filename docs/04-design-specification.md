@@ -7,7 +7,7 @@
 | Product | URL Shortener with Analytics at Scale |
 | Document | Design Specification |
 | Version | 1.0 |
-| Design direction | Minimalist, aesthetic, accessible, and quietly professional |
+| Design direction | Modern polished minimal SaaS product UI (Linear-inspired), accessible and quietly professional |
 | Related documents | `01-prd.md`, `03-app-flow.md` |
 
 ## 2. Design Objective
@@ -31,7 +31,7 @@ The product should feel like a clear desk: plenty of space, a few well-organized
 - Excessive rounded cards nested inside other rounded cards.
 - Auto-playing animation, animated counters, and attention-seeking charts.
 - Dense tables with tiny text.
-- Icon-only controls where the action matters.
+- Icon-only controls where the action matters (small supporting icons next to labels are fine, and used throughout, but never replace a text label).
 - Multiple competing primary buttons on the same screen.
 - Technical implementation language in user-facing copy.
 
@@ -83,23 +83,26 @@ Public redirect pages
 
 ### 5.1 Color system
 
-Use a neutral base with one restrained indigo/blue accent. The named tokens below are a starting point, not a requirement to hard-code raw values in components.
+Use a cool neutral base with one confident violet accent, in the vein of Linear/Vercel/Stripe-style SaaS products. The named tokens below are a starting point, not a requirement to hard-code raw values in components; they are implemented as CSS-native `@theme` tokens in `apps/web/src/styles/global.css`.
 
 | Token | Value | Usage |
 | --- | --- | --- |
-| `color.canvas` | `#FAFAF9` | Warm off-white page background. |
+| `color.canvas` | `#FBFBFC` | Cool off-white page background. |
 | `color.surface` | `#FFFFFF` | Cards, inputs, modal surfaces. |
-| `color.surfaceSubtle` | `#F5F5F4` | Quiet input/container fill. |
-| `color.text` | `#1C1917` | Primary text. |
-| `color.textMuted` | `#78716C` | Supporting labels and metadata. |
-| `color.border` | `#E7E5E4` | Light dividers and form borders. |
-| `color.accent` | `#4F46E5` | Primary actions, focused links, active states. |
-| `color.accentHover` | `#4338CA` | Hover/pressed primary action. |
-| `color.accentSoft` | `#EEF2FF` | Subtle selected/focus background. |
-| `color.success` | `#15803D` | Confirmed/success state. |
+| `color.surfaceSubtle` | `#F4F4F6` | Quiet input/container fill, segmented-control tracks. |
+| `color.text` | `#0F0F13` | Primary text. |
+| `color.textMuted` | `#6B6B76` | Supporting labels and metadata. |
+| `color.border` | `#E6E6EA` | Light dividers and form borders. |
+| `color.borderStrong` | `#D4D4DA` | Hover state for bordered surfaces. |
+| `color.accent` | `#5B57E0` | Primary actions, focused links, active states. |
+| `color.accentHover` | `#4B47CC` | Hover/pressed primary action. |
+| `color.accentSoft` | `#F0EFFF` | Subtle selected/focus background. |
+| `color.success` | `#17803D` | Confirmed/success state. |
 | `color.warning` | `#B45309` | Expiring soon / caution state. |
-| `color.danger` | `#B91C1C` | Delete action, destructive alert. |
+| `color.danger` | `#C0281C` | Delete action, destructive alert. |
 | `color.info` | `#0369A1` | Eventual-consistency information. |
+
+Each status color also has a paired `*Soft` background token (for example `color.dangerSoft`) used behind badges, alerts, and dot indicators so the saturated color is reserved for text/icons only.
 
 Rules:
 
@@ -110,7 +113,7 @@ Rules:
 
 ### 5.2 Typography
 
-Use one highly legible sans-serif family such as Inter, Geist, or system UI. Use a single family in Release 1 to keep the interface coherent and loading simple.
+Use Inter (with the system UI stack as fallback) as the single sans-serif family across the product, matching the reference product direction. Body text uses slightly tightened letter-spacing (`-0.011em`) for a denser, more polished feel typical of modern SaaS dashboards.
 
 | Role | Size / line height | Weight | Use |
 | --- | --- | --- | --- |
@@ -146,13 +149,13 @@ Desktop content uses a maximum width of 1,152–1,200 px and centered page gutte
 
 | Element | Rule |
 | --- | --- |
-| Card radius | 12 px. |
-| Input/button radius | 8 px. |
-| Border | 1 px `color.border`; use instead of heavy shadows. |
-| Shadow | Very subtle, only on modal or raised active surface. |
-| Buttons | Solid accent primary; quiet outlined or text secondary. |
-| Focus ring | 2–3 px visible accent ring with offset; never remove browser focus without replacement. |
-| Motion | 120–180 ms ease-out for opacity/background changes only. Respect `prefers-reduced-motion`. |
+| Card radius | 16 px (`radius.card`). |
+| Input/button radius | 10 px (`radius.control`). |
+| Border | 1 px `color.border`; paired with a very light shadow rather than relying on the border alone. |
+| Shadow | A restrained two-layer `shadow.card` sits under every card, input, and button by default (not only modals); it deepens slightly to `shadow.cardHover` on hover and to `shadow.dialog` for the confirmation modal. Shadows must stay subtle enough to read as "quiet elevation," never a heavy drop shadow. |
+| Buttons | Solid primary uses the near-black text color at rest and shifts to the accent color on hover; secondary is a bordered white surface; destructive stays outlined everywhere except the single solid button inside the delete-confirmation dialog. |
+| Focus ring | Text inputs use a 3 px accent-soft ring plus an accent border on focus instead of the browser's default outline; buttons and other controls keep a 2 px offset accent outline. Focus must never be removed without a replacement. |
+| Motion | 120–180 ms ease-out for opacity/background/shadow/transform changes (for example the advanced-options chevron rotation). Respect `prefers-reduced-motion`. |
 
 ## 6. Responsive Layout Rules
 
@@ -185,7 +188,8 @@ Rules for small screens:
 ```
 
 - Header height: 64 px desktop, 56–64 px mobile.
-- Product mark is a simple text wordmark plus a small non-decorative arrow/link glyph.
+- The header stays sticky at the top of the viewport with a translucent, blurred background (`backdrop-blur`) over the scrolling page content, a common modern-SaaS convention that keeps navigation reachable without feeling heavy.
+- Product mark pairs a small solid dark square logo tile containing a link glyph with the wordmark text, instead of a bare text wordmark.
 - Header has a bottom border, no large hero area.
 - “Links” is the only nav item in Release 1 and is visually quiet when already on the dashboard.
 
@@ -241,18 +245,18 @@ Badges are used sparingly for link lifecycle status:
 
 | State | Label | Style |
 | --- | --- | --- |
-| Active | Active | Muted green text on pale green neutral surface. |
-| Expiring soon | Expires soon | Amber text/surface, only when within configured period. |
-| Expired | Expired | Neutral/amber muted badge. |
-| Deleted | Deleted | Neutral gray badge in administrative/history context only. |
+| Active | Active | Small colored dot indicator + label inside a bordered white pill. |
+| Expiring soon | Expires soon | Amber dot indicator, only when within configured period. |
+| Expired | Expired | Neutral/amber dot indicator. |
+| Deleted | Deleted | Neutral gray dot indicator, in administrative/history context only. |
 
-Do not use badges for every metadata value. Creation date and click count should be plain text.
+The badge uses a small colored dot (not a filled background) next to the label inside a bordered pill on the surface color, a common modern-SaaS convention for lightweight status. Do not use badges for every metadata value. Creation date and click count should be plain text.
 
 ### 7.6 Metric card
 
 ```text
 ┌─────────────────────────┐
-│ Total clicks            │
+│ ⊙ Total clicks          │
 │                         │
 │ 1,248                   │
 │ Last 30 days            │
@@ -260,6 +264,7 @@ Do not use badges for every metadata value. Creation date and click count should
 ```
 
 - One key number per card.
+- A small muted icon sits beside the label for quick visual scanning, matching the reference product's convention; it is decorative (`aria-hidden`) and never a substitute for the text label.
 - Label above, supporting range/context below.
 - No decorative mini charts in the metric card for Release 1.
 - Use a single metric card for total clicks at the top; do not manufacture extra vanity metrics.
@@ -288,7 +293,7 @@ Do not use badges for every metadata value. Creation date and click count should
 
 ```text
 ┌─────────────────────────┐
-│ Top referrers            │
+│ ⊙ Top referrers          │
 │                           │
 │ news.example        400  │
 │ direct              286  │
@@ -299,7 +304,9 @@ Do not use badges for every metadata value. Creation date and click count should
 ```
 
 - Use a simple ranked list before considering pie charts.
+- A small muted icon labels the card title, consistent with the metric card.
 - Right-align counts for scanability.
+- Each row may show a light proportional background bar sized to that row's share of the top value, layered behind the text so it never reduces contrast (see Section 12.2).
 - Long referrer names are ellipsized but available on hover/focus.
 - Show `Direct / unknown` as a user-friendly normalized label rather than a blank value.
 
@@ -577,7 +584,7 @@ Rules:
 
 Use ranked lists for referrers, browsers, devices, and geography in Release 1. They are more readable, space-efficient, and accessible than several small pie charts.
 
-Optional horizontal bars may appear behind counts only if they do not reduce text contrast. They must never be the only presentation of the count.
+Each row uses a light accent-soft horizontal bar behind the row, proportional to that row's count relative to the highest count in the same card. The bar is a decorative layer only; the numeric count text is always present and must never rely on the bar's width to convey the value.
 
 ### 12.3 Number formatting
 

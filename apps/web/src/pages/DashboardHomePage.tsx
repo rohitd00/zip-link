@@ -21,7 +21,7 @@ export function DashboardHomePage() {
   return (
     <div className="flex flex-col gap-8">
       <div>
-        <h1 className="text-2xl font-bold text-text">Your links</h1>
+        <h1 className="text-[26px] font-semibold tracking-tight text-text">Your links</h1>
         <p className="mt-1 text-sm text-text-muted">
           Create a short link and see how people use it.
         </p>
@@ -31,7 +31,7 @@ export function DashboardHomePage() {
 
       <div>
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-base font-semibold text-text">Your links</h2>
+          <h2 className="text-[15px] font-semibold tracking-tight text-text">Your links</h2>
           <div className="w-full sm:w-64">
             <TextField
               label="Search links"
@@ -47,7 +47,7 @@ export function DashboardHomePage() {
           {loadingState === "loading" && <LinkListSkeleton />}
 
           {loadingState === "error" && (
-            <div className="rounded-[var(--radius-card)] border border-border bg-surface p-6 text-center">
+            <div className="rounded-[var(--radius-card)] border border-border bg-surface p-6 text-center shadow-[var(--shadow-card)]">
               <p className="text-sm text-text-muted">Couldn't load your links.</p>
               <div className="mt-3 flex justify-center">
                 <Button variant="secondary" onClick={retry}>
@@ -65,7 +65,7 @@ export function DashboardHomePage() {
           )}
 
           {loadingState === "loaded" && links.length > 0 && (
-            <div className="rounded-[var(--radius-card)] border border-border bg-surface px-4">
+            <div className="rounded-[var(--radius-card)] border border-border bg-surface px-3 shadow-[var(--shadow-card)] sm:px-4">
               <ul>
                 {links.map((link) => (
                   <LinkListItem key={link.shortCode} link={link} />
@@ -90,7 +90,7 @@ export function DashboardHomePage() {
 function LinkListSkeleton() {
   return (
     <div
-      className="flex flex-col gap-3 rounded-[var(--radius-card)] border border-border bg-surface p-4"
+      className="flex flex-col gap-3 rounded-[var(--radius-card)] border border-border bg-surface p-4 shadow-[var(--shadow-card)]"
       aria-busy="true"
       aria-label="Loading your links"
     >

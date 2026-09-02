@@ -1,5 +1,6 @@
 import type { FormEvent } from "react";
 import { useState } from "react";
+import { ChevronDown, PartyPopper, Repeat2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { CreateLinkResponseData } from "@shared/contracts/linkRequests";
 import { apiClient, ApiRequestError, NetworkUnavailableError } from "../../api/apiClient";
@@ -104,11 +105,14 @@ export function CreateLinkForm({ onLinkCreated }: CreateLinkFormProps) {
   }
 
   return (
-    <div className="rounded-[var(--radius-card)] border border-border bg-surface p-6">
-      <h2 className="text-base font-semibold text-text">Shorten a link</h2>
+    <div className="rounded-[var(--radius-card)] border border-border bg-surface p-6 shadow-[var(--shadow-card)] sm:p-7">
+      <h2 className="text-[15px] font-semibold tracking-tight text-text">Shorten a link</h2>
 
       {formLevelError !== null && (
-        <p role="alert" className="mt-3 rounded-md bg-danger-soft px-3 py-2 text-sm text-danger">
+        <p
+          role="alert"
+          className="mt-3 rounded-[var(--radius-control)] bg-danger-soft px-3 py-2 text-sm text-danger"
+        >
           {formLevelError}
         </p>
       )}
@@ -130,15 +134,19 @@ export function CreateLinkForm({ onLinkCreated }: CreateLinkFormProps) {
           aria-expanded={isAdvancedOpen}
           aria-controls="advanced-options-panel"
           onClick={() => setIsAdvancedOpen((current) => !current)}
-          className="self-start text-sm font-medium text-accent hover:underline"
+          className="inline-flex items-center gap-1 self-start text-sm font-medium text-text-muted transition-colors hover:text-text"
         >
-          {isAdvancedOpen ? "Hide advanced options" : "Advanced options"}
+          <ChevronDown
+            className={`h-3.5 w-3.5 transition-transform duration-150 ${isAdvancedOpen ? "rotate-180" : ""}`}
+            aria-hidden="true"
+          />
+          Advanced options
         </button>
 
         {isAdvancedOpen && (
           <div
             id="advanced-options-panel"
-            className="flex flex-col gap-4 border-t border-border pt-4"
+            className="flex flex-col gap-4 rounded-[var(--radius-control)] border border-border bg-surface-subtle/60 p-4"
           >
             <TextField
               label="Custom alias (optional)"
@@ -154,7 +162,7 @@ export function CreateLinkForm({ onLinkCreated }: CreateLinkFormProps) {
                 type="checkbox"
                 checked={isExpiryEnabled}
                 onChange={(event) => setIsExpiryEnabled(event.target.checked)}
-                className="h-4 w-4"
+                className="h-4 w-4 accent-accent"
               />
               Set expiry
             </label>
@@ -180,20 +188,27 @@ export function CreateLinkForm({ onLinkCreated }: CreateLinkFormProps) {
       </form>
 
       {successResult !== null && (
-        <div className="mt-4 rounded-[var(--radius-control)] border border-accent-soft bg-accent-soft p-4">
-          <p className="text-sm font-semibold text-text">
-            {successResult.wasExistingDuplicate ? "Existing link found" : "Link created"}
-          </p>
-          <div className="mt-2 flex flex-wrap items-center gap-3">
+        <div className="mt-5 rounded-[var(--radius-control)] border border-border bg-surface-subtle/60 p-4">
+          <div className="flex items-center gap-2">
+            {successResult.wasExistingDuplicate ? (
+              <Repeat2 className="h-4 w-4 text-accent" aria-hidden="true" />
+            ) : (
+              <PartyPopper className="h-4 w-4 text-accent" aria-hidden="true" />
+            )}
+            <p className="text-sm font-semibold text-text">
+              {successResult.wasExistingDuplicate ? "Existing link found" : "Link created"}
+            </p>
+          </div>
+          <div className="mt-2.5 flex flex-wrap items-center gap-3">
             <p className="break-all text-sm font-medium text-accent">{successResult.shortUrl}</p>
             <CopyButton valueToCopy={successResult.shortUrl} />
           </div>
-          <p className="mt-1 truncate text-xs text-text-muted">Opens {successResult.longUrl}</p>
+          <p className="mt-1.5 truncate text-xs text-text-muted">Opens {successResult.longUrl}</p>
           <Link
             to={`/links/${successResult.shortCode}`}
-            className="mt-2 inline-block text-sm font-medium text-accent hover:underline"
+            className="mt-2 inline-block text-sm font-medium text-accent hover:text-accent-hover"
           >
-            View analytics
+            View analytics →
           </Link>
         </div>
       )}
