@@ -10,6 +10,9 @@ import {
 } from "./testSupport/testDatabasePool";
 import { clearTestCacheKeys, createTestRedisClient } from "./testSupport/testRedisClient";
 import { createTestClickEventQueue, type TestClickEventQueue } from "./testSupport/testQueue";
+import { RollupCheckpointRepository } from "./repositories/rollupCheckpointRepository";
+import { RollupRepository } from "./repositories/rollupRepository";
+import { RollupService } from "./services/rollupService";
 
 let pool: Pool;
 let redisClient: Redis;
@@ -439,6 +442,36 @@ describe("GET /api/links/:code/analytics", () => {
     });
     expect(response.body.data.devices).toContainEqual({ name: "mobile", clickCount: 1 });
     expect(response.body.data.freshness.isEventuallyConsistent).toBe(true);
+  });
+
+  it("reports lastRollupAt as null until a rollup has actually run, then reflects it", async () => {
+    const { ownerCookie } = await createLinkAndCaptureOwnerCookie(
+      "https://example.com/rollup-freshness",
+    );
+    const createResponse = await request(app)
+      .post("/api/links")
+      .set("Cookie", ownerCookie)
+      .send({ longUrl: "https://example.com/rollup-freshness" });
+    const shortCode = createResponse.body.data.shortCode as string;
+
+    const beforeResponse = await request(app)
+      .get(`/api/links/${shortCode}/analytics`)
+      .set("Cookie", ownerCookie);
+    expect(beforeResponse.body.data.freshness.lastRollupAt).toBeNull();
+
+    const rollupService = new RollupService(
+      new RollupRepository(pool),
+      new RollupCheckpointRepository(pool),
+    );
+    await rollupService.runHourlyTimeRollup(new Date());
+
+    const afterResponse = await request(app)
+      .get(`/api/links/${shortCode}/analytics`)
+      .set("Cookie", ownerCookie);
+    expect(afterResponse.body.data.freshness.lastRollupAt).not.toBeNull();
+    expect(new Date(afterResponse.body.data.freshness.lastRollupAt).toString()).not.toBe(
+      "Invalid Date",
+    );
   });
 
   it("returns an explicit zero result for a link with no clicks in range", async () => {

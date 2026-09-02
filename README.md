@@ -5,17 +5,19 @@ analytics must never slow them down.** Redirect resolution is a cache-first, low
 read path. Click analytics are captured asynchronously through a queue and processed by a
 separate worker, so a slow database write or GeoIP lookup can never delay a visitor.
 
-> **Project status:** Phases 0–8 of the implementation plan are complete: the full backend
-> (link CRUD, cache-aside redirects, rate limiting, the BullMQ analytics pipeline, the
-> analytics query API), a modern React/Tailwind dashboard — create a link, watch it
-> appear in the list, open its analytics (live chart, breakdowns, accessible table
-> alternative), and delete it with confirmation — operational hardening (structured
-> logging with redaction, a `/metrics` endpoint, a controlled `503` on a database outage,
-> and a fully containerized API/worker/web/Postgres/Redis stack verified end to end), and a
-> recorded local benchmark proving the core architectural claim — a stopped analytics
-> worker never affects redirect latency (see [Redirect performance
-> benchmark](#redirect-performance-benchmark)). Only rollups remain — see [Implementation
-> status](#implementation-status) below.
+> **Project status:** All 8 phases of the implementation plan are complete: the full
+> backend (link CRUD, cache-aside redirects, rate limiting, the BullMQ analytics pipeline,
+> the analytics query API, and a checkpointed hourly/daily time rollup), a modern
+> React/Tailwind dashboard — create a link, watch it appear in the list, open its
+> analytics (live chart, breakdowns, accessible table alternative), and delete it with
+> confirmation — operational hardening (structured logging with redaction, a `/metrics`
+> endpoint, a controlled `503` on a database outage, and a fully containerized
+> API/worker/web/Postgres/Redis stack verified end to end), and a recorded local benchmark
+> proving the core architectural claim — a stopped analytics worker never affects redirect
+> latency (see [Redirect performance benchmark](#redirect-performance-benchmark)). The
+> remaining, deliberately-deferred work — dimension rollups, a retention job — is called
+> out honestly in [Known limitations](#known-limitations-current-state), not hidden. See
+> [Implementation status](#implementation-status) below.
 
 Full product/technical documentation lives in [`docs/`](docs/):
 [PRD](docs/01-prd.md) · [Technical specification](docs/02-technical-specification.md) ·
@@ -99,7 +101,8 @@ or hand-edited.
 | Analytics worker (UA parsing, offline GeoIP, HMAC IP hashing, idempotent insert)        | Done                                                                                                                                  |
 | Analytics query API (totals, timeline, referrer/device/browser/geography breakdowns)    | Done — reads raw `click_events` directly (see rollups row below)                                                                      |
 | React/Tailwind dashboard (create, list/search, link detail + live chart, delete)        | Done — verified live in a real browser, including the full create → click → chart flow                                                |
-| Rollups (`click_rollups_*` tables, scheduler)                                           | Not started — tables exist from the schema migration but nothing populates them yet                                                   |
+| Time rollups (`click_rollups_time`, hourly + daily, checkpointed)                       | Done — see [Analytics rollups](#analytics-rollups)                                                                                    |
+| Dimension rollups (`click_rollups_referrer`/`_device`/`_browser`/`_geography`)          | Not started — deliberately deferred; see [Analytics rollups](#analytics-rollups)                                                      |
 | Structured request/worker logging with a redaction guard                                | Done — one log line per request; a field-name safety net redacts anything IP/cookie/secret-shaped regardless of call site             |
 | `GET /metrics` (uptime, click-analytics queue depth and oldest-job age)                 | Done                                                                                                                                  |
 | Controlled `503` on a database outage during a redirect (was a generic `500`)           | Done                                                                                                                                  |
@@ -356,6 +359,7 @@ inside the `api` container so they always target this exact deployed schema vers
 ```bash
 docker compose exec api npm run migrate:up
 docker compose exec api npm run maintain:partitions
+docker compose exec api npm run rollup:run
 ```
 
 Then visit **http://localhost:8080**. To seed the dashboard with sample data for a quick
@@ -402,6 +406,17 @@ npm run maintain:partitions
 ```
 
 It is idempotent — safe to run repeatedly.
+
+### Rollup maintenance
+
+```bash
+npm run rollup:run
+```
+
+Recomputes the hourly and daily `click_rollups_time` rows for a recent overlap window (see
+[Analytics rollups](#analytics-rollups)) and exits. Also idempotent — run it on a schedule
+(every 15–30 minutes is reasonable) from the same kind of external scheduler as partition
+maintenance; this project does not run a persistent rollup daemon.
 
 ## API overview
 
@@ -467,11 +482,13 @@ returns a generic `404` without ever touching `click_events`. Response shape:
 
 Notes:
 
-- **No rollups yet.** Every response reads raw `click_events` directly — correct, but not
-  yet optimized for very large link histories. `freshness.lastRollupAt` is always `null`
-  because there is no rollup checkpoint to report; `isEventuallyConsistent` is always
-  `true`, honestly reflecting that the worker may not have finished processing the most
-  recent clicks yet.
+- **This endpoint always reads raw `click_events` directly**, not rollups — correct at
+  every scale this project has actually been tested at; see [Analytics
+  rollups](#analytics-rollups) for what rollups exist and why the read path doesn't use
+  them yet. `freshness.lastRollupAt` reports when the hourly time rollup last completed
+  (or `null` if it has never run) — informational metadata about the rollup job, not about
+  this response's own data. `isEventuallyConsistent` is always `true`, honestly reflecting
+  that the worker may not have finished processing the most recent clicks yet.
 - **Geography is privacy-thresholded.** A city with fewer than 3 events in the requested
   range is folded into its country (`city: null`) rather than shown on its own — a
   handful of clicks from one named city could otherwise identify a specific small group
@@ -483,6 +500,56 @@ Notes:
   timezone setting, which is not necessarily UTC. The query now explicitly converts to
   the requested zone, truncates, and converts back (`AnalyticsRepository.getTimeline`),
   matching the pattern in `database-schema.md` Section 14.2.
+
+## Analytics rollups
+
+`docs/06-implementation-plan.md` Section 10.3's rollout policy for rollups is explicit:
+"start simple and correct" — use raw events until a large or repeated-range query actually
+needs rollups, and never build a rollup that can't be recomputed from raw events. Here is
+exactly what that means has and hasn't been built:
+
+**Implemented: the time rollup (`click_rollups_time`), hourly and daily.**
+
+- `RollupRepository.upsertTimeRollupsForWindow` (`apps/api/src/repositories/rollupRepository.ts`)
+  groups a window of raw `click_events` by link and UTC-truncated bucket and upserts the
+  result — safe to run repeatedly, since `ON CONFLICT` overwrites each row with its
+  freshly recomputed count rather than adding to it.
+- `RollupService` (`apps/api/src/services/rollupService.ts`) computes a **recent overlap
+  window** for each run — the current, still-in-progress bucket plus 3 hours (hourly) or 2
+  days (daily) of history — and recomputes the whole thing every time. This is what makes
+  a late-arriving event (one that hit BullMQ's retry backoff, for example) get folded into
+  the correct rollup row the next run, rather than being permanently missed because its
+  bucket was already considered "done." After each run it records a checkpoint in
+  `analytics_rollup_checkpoints` (`hourly_time` / `daily_time`) — freshness reporting, not
+  a correctness gate: the repository always recomputes its full window from raw events
+  regardless of what the checkpoint says.
+- Run it with `npm run rollup:run` (see [Rollup maintenance](#rollup-maintenance)) — a
+  short-lived script meant for an external scheduler, the same pattern as
+  `maintain:partitions`, not a persistent daemon.
+- Verified with repeatable integration tests, not a one-time successful run:
+  `rollupRepository.test.ts` covers per-link grouping, idempotency (running twice produces
+  the same final count, not double the count), a simulated late event actually updating an
+  already-rolled-up bucket, and window boundaries being respected; `rollupService.test.ts`
+  covers the checkpoint being written and the hourly/daily jobs never sharing one.
+
+**Not implemented: the dimension rollups** (`click_rollups_referrer`, `_device`,
+`_browser`, `_geography`) **and switching `AnalyticsService` to read from rollups.** Both
+are deliberately deferred, for reasons specific to each:
+
+- The dimension rollup tables already exist (from the schema migration) and could be
+  populated the same way `click_rollups_time` is, but the rollout policy gates that on
+  "query plans or benchmark results" justifying it — this project's dimension breakdown
+  queries have stayed fast on raw events at every scale actually tested (see the [redirect
+  performance benchmark](#redirect-performance-benchmark) — a different query path, but the
+  same underlying table and indexes), so there is no such evidence yet.
+- Switching the analytics API's read path is not just a table swap: `AnalyticsRepository.getTimeline`
+  buckets in the _requester's_ timezone, while rollups are always stored in UTC (per
+  database-schema.md Section 15.2 — "mixing user-specific local buckets into globally
+  stored daily rollups creates complexity and inconsistent totals"). Doing this correctly
+  needs a genuine hybrid-range strategy: recent, still-settling buckets read from raw
+  events, older UTC-safe buckets read from rollups. That's a real, separate piece of work
+  with its own correctness risk, not something to bolt on without the benchmark evidence
+  that motivates it.
 
 ## Privacy and security behavior implemented so far
 
@@ -725,9 +792,11 @@ original, more detailed version this summarizes:
 - **No single-flight cache-miss coalescing yet** (see [Known
   limitations](#known-limitations-current-state) below) — the natural next step if the
   thundering-herd tail latency in the benchmark above ever matters at real traffic.
-- **Raw `click_events` queries, no rollups yet.** Correct and fast enough at this
-  project's tested scale; a link with a very large click history is the trigger for
-  building the rollup scheduler the schema already has tables for.
+- **The analytics API reads raw `click_events` directly, not the time rollup that now
+  exists.** Correct and fast enough at this project's tested scale; a large/repeated-range
+  query actually being slow is the trigger for building the hybrid raw/rollup read path —
+  see [Analytics rollups](#analytics-rollups) for exactly why that's a separate piece of
+  work, not just a table swap.
 - **A fixed-window rate limiter, not a sliding one.** Chosen because the creation
   endpoint's abuse control only needs to be roughly right, not exact — a burst spanning
   two windows could briefly exceed the configured limit, which is an acceptable trade-off
@@ -744,11 +813,9 @@ original, more detailed version this summarizes:
   short code never reaches the SPA at all — the API renders the (already-implemented,
   already-tested) HTML error page directly for `GET /:code`, per Rule G-04's status as
   handled by Phase 2, not Phase 6.
-- **No rollups yet.** `click_rollups_*` tables exist but nothing populates them; the
-  analytics API queries raw `click_events` directly for every request. This is correct
-  for the traffic volumes this project has actually been tested at, but a link with a
-  very large click history would eventually need rollups to stay fast — see the rollup
-  scheduler work still listed in `docs/06-implementation-plan.md`.
+- **Dimension rollups don't exist yet, and the analytics API doesn't read from rollups at
+  all.** See [Analytics rollups](#analytics-rollups) for exactly what is and isn't built
+  and why — the time rollup itself is implemented, tested, and schedulable.
 - **No retention/cleanup job yet.** Old partitions, dedupe rows, and events are not
   automatically pruned.
 - **Rate limiter is a fixed window, not a true sliding window.** A burst spanning two
@@ -789,8 +856,10 @@ not assumed:
 
 - [x] Database migrations and partition maintenance are verified — run for real against a
       fresh containerized PostgreSQL (see [Running the full stack in
-      Docker](#running-the-full-stack-in-docker-api-worker-web-postgresql-redis)), and
-      `scripts/create-future-click-event-partitions.ts` confirmed idempotent.
+      Docker](#running-the-full-stack-in-docker-api-worker-web-postgresql-redis)), and both
+      `scripts/create-future-click-event-partitions.ts` and `scripts/runAnalyticsRollup.ts`
+      confirmed idempotent (the latter also run for real against the dev database, plus
+      repeatable integration tests — see [Analytics rollups](#analytics-rollups)).
 - [x] Generated base62 links and custom aliases work under concurrent requests —
       covered by `linkRepository.test.ts`'s concurrent-ID-allocation test.
 - [x] Redirect cache-aside path works with safe PostgreSQL fallback — covered by

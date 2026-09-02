@@ -78,6 +78,7 @@ export async function truncateAllTestData(pool: Pool): Promise<void> {
       click_rollups_device,
       click_rollups_referrer,
       click_rollups_time,
+      analytics_rollup_checkpoints,
       analytics_event_deduplication,
       click_events,
       links

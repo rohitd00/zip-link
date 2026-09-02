@@ -18,6 +18,7 @@
     "migrate:down": "node-pg-migrate down -m database/migrations",
     "migrate:create": "node-pg-migrate create -m database/migrations --",
     "maintain:partitions": "tsx scripts/create-future-click-event-partitions.ts",
+    "rollup:run": "tsx scripts/runAnalyticsRollup.ts",
     "seed": "tsx scripts/seedSampleData.ts"
   },
   "dependencies": {

@@ -19,6 +19,7 @@ import { requestLoggingMiddleware } from "./middleware/requestLoggingMiddleware"
 import { ClickEventPublisher } from "./queue/clickEventPublisher";
 import { AnalyticsRepository } from "./repositories/analyticsRepository";
 import { LinkRepository } from "./repositories/linkRepository";
+import { RollupCheckpointRepository } from "./repositories/rollupCheckpointRepository";
 import { createHealthRoutes } from "./routes/healthRoutes";
 import { createLinksRoutes } from "./routes/linksRoutes";
 import { createMetricsRoutes } from "./routes/metricsRoutes";
@@ -50,6 +51,7 @@ export interface BuildApiAppOptions {
 export function buildApiApp(options: BuildApiAppOptions): Express {
   const linkRepository = new LinkRepository(options.databasePool);
   const analyticsRepository = new AnalyticsRepository(options.databasePool);
+  const rollupCheckpointRepository = new RollupCheckpointRepository(options.databasePool);
   const redirectCacheRepository = new RedirectCacheRepository(options.redisClient);
   const creationRateLimiter = new CreationRateLimiter(
     options.redisClient,
@@ -73,6 +75,7 @@ export function buildApiApp(options: BuildApiAppOptions): Express {
     linkRepository,
     analyticsRepository,
     options.publicBaseUrl,
+    rollupCheckpointRepository,
   );
 
   const healthController = new HealthController(options.databasePool, options.redisClient);
