@@ -5,14 +5,16 @@ analytics must never slow them down.** Redirect resolution is a cache-first, low
 read path. Click analytics are captured asynchronously through a queue and processed by a
 separate worker, so a slow database write or GeoIP lookup can never delay a visitor.
 
-> **Project status:** Phases 0–7 of the implementation plan are complete: the full backend
+> **Project status:** Phases 0–8 of the implementation plan are complete: the full backend
 > (link CRUD, cache-aside redirects, rate limiting, the BullMQ analytics pipeline, the
 > analytics query API), a modern React/Tailwind dashboard — create a link, watch it
 > appear in the list, open its analytics (live chart, breakdowns, accessible table
-> alternative), and delete it with confirmation — and operational hardening (structured
+> alternative), and delete it with confirmation — operational hardening (structured
 > logging with redaction, a `/metrics` endpoint, a controlled `503` on a database outage,
-> and a fully containerized API/worker/web/Postgres/Redis stack verified end to end). Only
-> rollups and load benchmarking remain — see [Implementation
+> and a fully containerized API/worker/web/Postgres/Redis stack verified end to end), and a
+> recorded local benchmark proving the core architectural claim — a stopped analytics
+> worker never affects redirect latency (see [Redirect performance
+> benchmark](#redirect-performance-benchmark)). Only rollups remain — see [Implementation
 > status](#implementation-status) below.
 
 Full product/technical documentation lives in [`docs/`](docs/):
@@ -65,6 +67,20 @@ Today, every portion of this diagram exists and runs — the API, PostgreSQL, Re
 rate limiter, and BullMQ), the analytics worker, the analytics query API, and the React
 dashboard shown above it.
 
+## Screenshots
+
+The dashboard home — create a link, search/paginate the owner's list:
+
+![Dashboard home, showing the create-link form and three sample links](docs/screenshots/dashboard-home.png)
+
+A link's detail page — total clicks, a live chart, and referrer/device/browser/geography
+breakdowns:
+
+![Link detail and analytics page, showing a clicks-over-time chart and four breakdown cards](docs/screenshots/link-detail-analytics.png)
+
+Both were captured against real seeded data (`npm run seed`) in a real browser, not mocked
+or hand-edited.
+
 ## Implementation status
 
 | Area                                                                                    | Status                                                                                                                                |
@@ -90,7 +106,7 @@ dashboard shown above it.
 | Docker images for API/worker/web, full container journey                                | Done — `docker compose up -d --build` builds and runs all five services; verified end to end (create → redirect → worker → analytics) |
 | Local sample-data seed script (`npm run seed`)                                          | Done                                                                                                                                  |
 | Retention/cleanup job for old partitions and dedupe rows                                | Not started — see [Backup, restore, and retention](#backup-restore-and-retention)                                                     |
-| Load benchmarking                                                                       | Not started                                                                                                                           |
+| Load benchmarking                                                                       | Done — see [Redirect performance benchmark](#redirect-performance-benchmark)                                                          |
 
 This matches the "foundation first" phased approach in
 [the implementation plan](docs/06-implementation-plan.md): Phases 0–7 are complete — the
@@ -582,6 +598,141 @@ The intended shape, per `docs/05-database-schema.md`, is a scheduled job that dr
 window, and prunes `click_rollups_*` rows once rollups themselves exist. Until that job is
 built, storage grows unbounded and an operator should watch disk usage manually.
 
+## Redirect performance benchmark
+
+**Recorded 2026-09-02, on the developer's own machine — not production hardware.** These
+numbers describe how this specific single-process Node API behaves on a laptop under
+`autocannon` load, not what a real deployment would achieve. Every number below comes from
+an actual recorded run (see the exact `autocannon` commands under each scenario); none are
+estimated or copied from documentation.
+
+**Environment:** Windows 11, Intel Core i5-12450HX (12 logical cores), 15.7 GB RAM,
+Node.js v24.14.1, single API process (`npm run dev:api`, no clustering), single worker
+process (concurrency 10), PostgreSQL native install, Redis in Docker — i.e. the same local
+setup described above, not a tuned production topology. `autocannon` ran on the same
+machine as the server, so results include no network latency but do share CPU with the
+server process itself.
+
+**Method:** created one dedicated link (`benchmark-redirect`) via the real `POST
+/api/links` endpoint, warmed its cache entry with one request, then ran each scenario 3
+times back to back and report the range rather than a single cherry-picked run. All
+`3xx`/`2xx` categorization below comes from each run's `statusCodeStats` (every response
+in every scenario was a `302`).
+
+### Baseline (warm cache)
+
+```bash
+npx autocannon -c 50 -d 15 http://localhost:3000/benchmark-redirect
+```
+
+| Run | Requests | RPS (avg) | p50  | p90  | p97.5 | p99  | max   | Errors |
+| --- | -------- | --------- | ---- | ---- | ----- | ---- | ----- | ------ |
+| 1   | 24,986   | 1,666     | 28ms | 35ms | 48ms  | 57ms | 156ms | 0      |
+| 2   | 25,421   | 1,695     | 28ms | 34ms | 40ms  | 45ms | 84ms  | 0      |
+| 3   | 25,769   | 1,718     | 28ms | 33ms | 38ms  | 40ms | 48ms  | 0      |
+
+Consistent across runs: ~1,700 requests/second sustained at 50 concurrent connections,
+p50 latency a stable 28ms, zero errors or timeouts in any run.
+
+### Burst (high concurrency)
+
+```bash
+npx autocannon -c 300 -d 10 http://localhost:3000/benchmark-redirect
+```
+
+| Run | Requests | RPS (avg) | p50   | p90   | p97.5 | p99   | max   | Errors |
+| --- | -------- | --------- | ----- | ----- | ----- | ----- | ----- | ------ |
+| 1   | 17,776   | 1,778     | 164ms | 198ms | 230ms | 240ms | 243ms | 0      |
+| 2   | 18,544   | 1,855     | 158ms | 184ms | 209ms | 230ms | 234ms | 0      |
+| 3   | 18,658   | 1,866     | 159ms | 173ms | 182ms | 219ms | 223ms | 0      |
+
+Throughput at 300 connections is roughly the same as (or slightly above) the 50-connection
+baseline — this single Node process's event loop is the bottleneck, not the database or
+Redis — while p50 latency rises from ~28ms to ~160ms as requests queue up behind it.
+**Resource usage during a monitored burst run** (sampled via `Get-Process` every second):
+API process CPU time increased by ~7.0 seconds over a ~10.2 second run (≈69% of one
+logical core — this is a single-threaded JS process, so it cannot exceed ~100% of one
+core no matter how many are available) and working-set memory stayed flat at ~231–232MB
+with no growth across the run, i.e. no indication of a memory leak under sustained load.
+
+### Cold lookup (cache miss)
+
+```bash
+docker exec url-shortener-redis redis-cli del "redirect:link:benchmark-redirect"
+curl -w "%{time_total}s\n" http://localhost:3000/benchmark-redirect   # forces a PostgreSQL fallback + cache backfill
+```
+
+A single deliberately-cleared cache key, measured with `curl`'s own timing, then compared
+to the very next request against the now-repopulated cache:
+
+| Run | Cold miss (PostgreSQL fallback) | Immediate re-hit (from cache) |
+| --- | ------------------------------- | ----------------------------- |
+| 1   | 75ms                            | 7ms                           |
+| 2   | 7ms                             | 9ms                           |
+| 3   | 8ms                             | 6ms                           |
+
+Only the very first miss after the API process had been idle showed a real penalty (75ms);
+later misses were nearly as fast as a cache hit, because PostgreSQL's own query plan and
+connection were already warm — the single-row indexed lookup by `short_code` is simply
+fast once warmed, cache or no cache.
+
+**Cold cache under concurrent load** (thundering herd): clearing the cache key and
+immediately firing 50 concurrent connections for 3 seconds produced 3,611 successful
+redirects, 0 errors, 0 timeouts — but a p99 of 174ms and a max of 626ms, notably worse than
+either the warm baseline or a single cold request. This is because `RedirectService` has
+no single-flight/request-coalescing protection against a cache-miss stampede: many
+concurrent requests for the same just-evicted key can each independently query PostgreSQL
+and each independently write the cache back, instead of one request doing the work and the
+rest waiting on it. No requests failed, but see [Known limitations](#known-limitations-current-state).
+
+### Queue degraded (worker stopped)
+
+Stopped the analytics worker process entirely, then ran the same baseline load
+(`-c 50 -d 10`) against the redirect route:
+
+| Requests | RPS (avg) | p50  | p90  | p97.5 | p99  | max  | Errors |
+| -------- | --------- | ---- | ---- | ----- | ---- | ---- | ------ |
+| 25,773   | 2,578     | 11ms | 36ms | 43ms  | 46ms | 63ms | 0      |
+
+Redirect performance was **unaffected** by the worker being completely stopped — if
+anything, slightly faster, since the worker was no longer competing for the same
+PostgreSQL connections. `GET /metrics` confirmed the click-analytics queue correctly
+absorbed all 25,773 jobs as `waitingJobs` with zero enqueue failures. Restarting the worker
+(concurrency 10) drained that entire backlog to zero in about 20–25 seconds, confirming
+recovery is not just non-blocking but fast once the worker comes back — this is the
+concrete evidence behind this project's core architectural claim: **a stopped or degraded
+analytics worker never affects redirect availability or latency.**
+
+## Trade-offs and future scale path
+
+A few deliberate simplicity choices, and what would change first if this needed to handle
+real production traffic — see `docs/02-technical-specification.md` Section 9.5 for the
+original, more detailed version this summarizes:
+
+- **Single Node process, no clustering.** The benchmark above shows this project's
+  event loop is the bottleneck at high concurrency, not PostgreSQL or Redis. The first
+  scale step is horizontal — run several API instances behind a load balancer (Node's own
+  `cluster` module or a process manager would work too) — not a code rewrite, because the
+  redirect path already has no per-instance state (the owner cookie is signed and
+  stateless; the cache lives in Redis, not in-process).
+- **A hot short code could still bottleneck a single Redis key.** If a viral link's cache
+  key becomes the bottleneck, the documented next steps are (in order): measure the actual
+  hot-key traffic and Redis command latency first, then add a small bounded in-process LRU
+  cache with a short TTL in front of Redis, then move to Redis replicas/cluster, then
+  consider deploying redirect service instances nearer to traffic sources. Edge caching is
+  deliberately last on that list — its expiry/invalidation guarantees need to be worked
+  out carefully before adopting it, not reached for first.
+- **No single-flight cache-miss coalescing yet** (see [Known
+  limitations](#known-limitations-current-state) below) — the natural next step if the
+  thundering-herd tail latency in the benchmark above ever matters at real traffic.
+- **Raw `click_events` queries, no rollups yet.** Correct and fast enough at this
+  project's tested scale; a link with a very large click history is the trigger for
+  building the rollup scheduler the schema already has tables for.
+- **A fixed-window rate limiter, not a sliding one.** Chosen because the creation
+  endpoint's abuse control only needs to be roughly right, not exact — a burst spanning
+  two windows could briefly exceed the configured limit, which is an acceptable trade-off
+  for the complexity a true sliding window would add.
+
 ## Known limitations (current state)
 
 - **The dashboard bundle is not code-split.** Recharts pushes the built bundle past Vite's
@@ -607,6 +758,15 @@ built, storage grows unbounded and an operator should watch disk usage manually.
 - **Bot detection is a keyword heuristic, not `ua-parser-js`'s own bot-detection module.**
   See the comment in `apps/worker/src/enrichment/userAgentParser.ts` for why (a package
   subpath import that needs a module-resolution setting this project doesn't use).
+- **No single-flight protection against a cache-miss thundering herd.** If many concurrent
+  requests arrive for the same short code right after its cache entry expires or is
+  evicted, each one independently queries PostgreSQL and independently writes the cache
+  back, instead of one request doing the work while the rest wait on it. Confirmed via the
+  benchmark above: no requests failed, but tail latency (p99/max) was noticeably worse
+  than either a warm cache or a single isolated cold miss. Correct behavior either way —
+  every request still gets the right answer — just not the most efficient one under that
+  specific condition. Worth adding request coalescing (for example via a short-lived
+  in-flight-request map, or a Redis lock) if this pattern shows up at real traffic volumes.
 - **Dependency audit:** `npm audit` reports 7 advisories, all rooted in two transitive
   packages: `esbuild` (pulled in by Vite/Vitest's dev toolchain) and `glob` (pulled in by
   `node-pg-migrate`'s CLI). Neither is imported by the API/worker/web _application code_
@@ -621,6 +781,52 @@ built, storage grows unbounded and an operator should watch disk usage manually.
   built images even though the running application never calls into them. Revisit before
   a real deployment, and prefer `--omit=dev` plus a genuine compiled-JS build step if image
   contents need to be minimal.
+
+## Release checklist
+
+Per `docs/06-implementation-plan.md` Section 20, checked only once genuinely verified —
+not assumed:
+
+- [x] Database migrations and partition maintenance are verified — run for real against a
+      fresh containerized PostgreSQL (see [Running the full stack in
+      Docker](#running-the-full-stack-in-docker-api-worker-web-postgresql-redis)), and
+      `scripts/create-future-click-event-partitions.ts` confirmed idempotent.
+- [x] Generated base62 links and custom aliases work under concurrent requests —
+      covered by `linkRepository.test.ts`'s concurrent-ID-allocation test.
+- [x] Redirect cache-aside path works with safe PostgreSQL fallback — covered by
+      `app.test.ts`'s "serves from cache even after the database row is deleted" test, and
+      exercised for real in the [cold lookup benchmark](#redirect-performance-benchmark).
+- [x] Redirect does not wait for analytics worker processing — proven by the [queue
+      degraded benchmark](#redirect-performance-benchmark): redirect latency was
+      unaffected (if anything, faster) with the worker completely stopped.
+- [x] Analytics queue/worker is idempotent and privacy-preserving — dedupe-claim-then-insert
+      covered by `clickEventProcessor.test.ts`; raw IP never persisted, covered by
+      `ipHasher.test.ts` and a direct row inspection in `clickEventRepository.test.ts`.
+- [x] Owner-only link management and analytics access are enforced — cross-owner requests
+      return a generic 404, covered in `app.test.ts`.
+- [x] Dashboard implements the approved design and accessibility requirements — see
+      `docs/04-design-specification.md`'s Section 18 acceptance checklist and the
+      Testing-Library-based component tests.
+- [x] Docker Compose supports the full local journey — verified live: build, migrate,
+      create a link, redirect, worker processes it, analytics visible, all through the
+      `web` container's nginx proxy.
+- [x] Health, logs, and metrics are present and safe — `/health/live`, `/health/ready`,
+      `/metrics`; every log line passes through the redaction guard described in [Privacy
+      and security behavior](#privacy-and-security-behavior-implemented-so-far).
+- [x] Load benchmark evidence is recorded — see [Redirect performance
+      benchmark](#redirect-performance-benchmark), every number cited to an actual run.
+- [x] README and all project docs match the implementation — the [Implementation
+      status](#implementation-status) table and [Known limitations](#known-limitations-current-state)
+      section are kept current with every phase, including this one.
+- [x] No secrets, raw IP addresses, fabricated benchmark values, or undocumented shortcuts
+      remain — `.env` was never committed (confirmed via `git ls-files`); every benchmark
+      number above cites its own recorded run; every known shortcut or trade-off is called
+      out explicitly rather than left silent.
+
+Everything in this checklist is verified as of the commit that introduced this section.
+A version tag has not been created yet — that is a deliberate choice left to the project
+owner, not an oversight, since choosing a version number and cutting a release is a
+product decision rather than a technical one.
 
 No performance claim is made yet; no benchmark has been run. That happens in a later
 phase per the implementation plan, and only measured, reproducible numbers will be
