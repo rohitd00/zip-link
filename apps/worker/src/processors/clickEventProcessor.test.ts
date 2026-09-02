@@ -64,6 +64,7 @@ describe("processClickEventJob", () => {
     const insertedRow = rowsResult.rows[0];
     expect(insertedRow.device_type).toBe("desktop");
     expect(insertedRow.browser_name).toBe("Chrome");
+    expect(insertedRow.os_name).toBe("Windows");
     expect(insertedRow.referrer_host).toBe("news.example.com");
     expect(insertedRow.country_code).toBe("US");
     expect(insertedRow.ip_hash).not.toBeNull();

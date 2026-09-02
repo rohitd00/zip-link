@@ -34,6 +34,9 @@ async function insertLink(shortCode: string): Promise<string> {
     normalizedLongUrl: "https://example.com/page",
     ownerContext: { ownerType: "anonymous_session", ownerId: "test-owner" },
     expiresAt: null,
+    utmSource: null,
+    utmMedium: null,
+    utmCampaign: null,
   });
 
   return link.id;

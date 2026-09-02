@@ -572,15 +572,73 @@ These recur throughout the sections above; naming them once, together, makes the
 5. **Prefer an abstraction that already generalizes over a special case bolted on later.** `OwnerContext` existed before accounts did, specifically so accounts wouldn't require rewriting the systems built around it (Section 7).
 6. **When a shared abstraction would increase risk to already-tested code, duplicate instead — and say so.** The auth rate limiter (Section 8.7) is the clearest example, chosen explicitly because the constraint on that work was "don't break what's already working."
 
-## 14. Trade-offs and honest limitations
+## 14. Analytics feature extensions
+
+A second phase of work added five analytics-facing features on top of the system described above: unique visitors, UTM/campaign tracking, operating-system breakdown, period-over-period comparison, and CSV export. None of them required a new subsystem — each one reuses data or infrastructure that already existed for a different reason, which is worth making explicit since it's a direct continuation of the "prefer an abstraction that already generalizes" principle (Section 13.5).
+
+```mermaid
+flowchart LR
+    subgraph Capture["Captured once, at the point data already passes through"]
+        URLParse["Link creation (API):<br/>parse utm_source/medium/campaign<br/>from the long URL's own query string"]
+        UAParse["Click enrichment (worker):<br/>ua-parser-js already parses<br/>device + browser -- OS is the<br/>same call, one more field read"]
+        IPHash["Click enrichment (worker):<br/>ip_hash already computed<br/>for privacy -- reused as-is<br/>for uniqueness, never re-derived"]
+    end
+
+    URLParse --> LinksTable[("links.utm_source / utm_medium / utm_campaign")]
+    UAParse --> ClickEvents[("click_events.os_name")]
+    IPHash --> ClickEvents
+
+    ClickEvents --> Query["AnalyticsRepository:<br/>COUNT(DISTINCT ip_hash),<br/>GROUP BY os_name"]
+    LinksTable --> LinkDetail["GET /api/links/:code<br/>response"]
+    Query --> AnalyticsResponse["GET /api/links/:code/analytics<br/>response"]
+    AnalyticsResponse --> CsvExport["GET .../analytics/export<br/>(same query, CSV serialization)"]
+
+    style URLParse fill:#5546FF,color:#fff
+    style UAParse fill:#5546FF,color:#fff
+    style IPHash fill:#5546FF,color:#fff
+```
+
+### 14.1 Unique visitors — approximated by reusing the existing IP hash, not a new visitor-tracking mechanism
+
+`AnalyticsRepository.getUniqueVisitorCount` is `COUNT(DISTINCT ip_hash) WHERE ip_hash IS NOT NULL` over the same `click_events.ip_hash` column that has existed since before accounts, worker OS parsing, or any of this phase's work — originally written purely for the HMAC-hashed-IP privacy guarantee (Section 10.4), now doing double duty as a uniqueness key. No new column, no new cookie, no new hashing logic.
+
+This was a deliberate accuracy trade-off, made explicitly rather than by default: an IP-hash-based count **undercounts** uniqueness behind shared or carrier-grade NAT (many real visitors sharing one public IP look like one visitor) and **overcounts** if one visitor's IP changes between visits (mobile networks reassign IPs often). The alternative — a dedicated first-party visitor cookie, set on first click and hashed the same way before storage — would be more accurate per person, at the cost of a new piece of client-side state and a new privacy surface to reason about and document. For a portfolio-scale product where "approximately how many distinct people" is more useful than "exactly how many," reusing existing infrastructure was judged the better trade; the response field name (`uniqueVisitors`) and its accompanying UI copy ("Approximated by distinct hashed IP addresses") both say so honestly rather than implying more precision than the number actually has.
+
+### 14.2 UTM/campaign tracking — captured once, scoped to one link, not a cross-campaign feature (yet)
+
+`utm_source`/`utm_medium`/`utm_campaign` are parsed from the destination URL's own query string at creation time (`apps/api/src/domain/utmParsing.ts`, a pure function following the same shape as every other domain validator in this codebase) and stored directly on the `links` row. They are never re-parsed, re-derived, or allowed to change after creation — the destination URL itself doesn't change after a link is created, so there's nothing for them to track "over time."
+
+This is deliberately scoped narrower than a full campaign-analytics feature: it captures and displays UTM parameters on that one link's own detail page, but does not add a cross-link view that aggregates every link sharing the same `utm_campaign` value. That cross-link aggregation is really the same underlying need as a not-yet-built cross-link dashboard (README's "Future improvements" list) — building it now would mean either duplicating that future work or building it prematurely, scoped only to campaigns, before the more general owner-scoped aggregate view exists. Capturing the data now and deferring its cross-link aggregation is the smaller, correctly-scoped increment; the data being stored from day one means that future feature is additive, not a backfill migration.
+
+One correctness detail worth stating plainly: UTM parameters are part of the URL's query string, and duplicate-link detection (`findActiveDuplicateByOwnerAndNormalizedUrl`) normalizes on the **full** URL including its query string (`buildNormalizedUrl` in `urlValidation.ts`). Two otherwise-identical URLs differing only in `utm_campaign` therefore normalize to two different values and are correctly treated as two separate links, each with its own captured UTM data — they never collide into a false "duplicate."
+
+### 14.3 Operating-system breakdown — one more field from a call the worker already makes
+
+The worker's `parseUserAgent` (in `userAgentParser.ts`) has always run `ua-parser-js` against the User-Agent header to classify device type and browser; the same parse result also carries the OS name, previously read and discarded. This phase reads that field too and stores it alongside `device_type`/`browser_name` on `click_events` (`os_name`, following the same `COALESCE(..., 'Unknown')` pattern the browser breakdown query already used). Nothing new is parsed, hashed, looked up, or called — this is the cheapest of the five features by a wide margin, and its low cost was the reason it was in scope alongside genuinely new work like unique visitors and UTM capture.
+
+### 14.4 Period-over-period comparison — a frontend-only feature, deliberately with no new backend endpoint
+
+`GET /api/links/:code/analytics` already accepted an arbitrary `from`/`to` range before this phase. Comparing "this period" to "the period immediately before it" therefore needed no new backend capability at all: the dashboard's `usePeriodComparison` hook computes the immediately-preceding, equal-length range client-side and calls the exact same endpoint a second time. The percentage delta itself (`computePercentChange`, a small pure function, unit-tested in isolation) is computed in the browser, not the API.
+
+The one deliberate constraint: this second fetch only happens while the "Compare to previous period" toggle is on — not automatically on every page load — so opting out costs nothing. Adding a dedicated `/analytics/compare` endpoint that computed both ranges and the delta server-side was considered and rejected: it would only save one network round trip, at the cost of a new endpoint, a new response shape, and a second place the same query logic has to be kept correct — not a good trade for a feature whose backend half already existed.
+
+### 14.5 CSV export — the same authorization and the same query, a different serialization
+
+`AnalyticsController.exportLinkAnalyticsCsv` calls `AnalyticsService.getLinkAnalytics` — the exact same method, with the exact same ownership check and range/timezone/bucket validation, that backs the JSON endpoint — and passes the result through `buildAnalyticsCsv`, a pure domain function that renders it as a multi-section CSV (`Summary`, `Timeline`, `Referrers`, `Devices`, `Operating Systems`, `Browsers`, `Geography`). There is no separate authorization path to get wrong, no separate query to keep in sync, and no risk of the export ever showing different (or differently-authorized) data than the dashboard itself shows for the same range.
+
+The export deliberately contains only the same aggregate breakdowns the dashboard already displays — never a per-click row. This was a direct decision, not an oversight: this codebase has held a consistent line since before accounts existed that click-level and IP-level data is never exposed, even to a link's own owner (Section 10.4's "what is never persisted, and why," and the geography city-suppression threshold in Section 9's analytics notes). A per-click CSV export — timestamp, referrer, device, browser, OS, country/city per row — would be a new category of data exposure this project has specifically avoided elsewhere, for the same underlying reason a handful of clicks from one named city are folded into their country rather than shown individually: aggregate counts don't identify a specific visitor's behavior; a timestamped per-click log starts to.
+
+## 15. Trade-offs and honest limitations
 
 - **No refresh-token rotation or short-lived access tokens** — sessions are long-lived (30 days) and revocation is all-or-nothing per session. Acceptable for this product's risk profile; a system handling more sensitive data would want shorter-lived tokens with rotation.
 - **Email verification is not enforced at login** — a welcome email is sent, but an unverified email can still sign in. This was a deliberate scope decision (not required by the product ask) to avoid adding a verification-gate flow; `email_verified_at` already exists on the schema so enforcing it later is additive, not a migration.
 - **The auth rate limiter's duplication (Section 8.7) is deliberate debt**, expected to be revisited once a third rate-limited surface exists.
 - **No CAPTCHA or bot-detection on signup** — rate limiting is the only defense against automated account creation today.
 - **Single-region deployment** — Neon/Upstash/Render are each provisioned in one region; there's no multi-region failover story yet, consistent with this being a portfolio-scale deployment rather than a system designed for geographic redundancy.
+- **`uniqueVisitors` is an approximation, not an exact count** (Section 14.1) — accepted deliberately, but worth restating here alongside the system's other honest imprecisions.
+- **The worker's optional HTTP health server is gated on its own `ENABLE_WORKER_HTTP_HEALTH_SERVER` flag, not on `PORT` being present** — a real bug surfaced during deployment: local development and docker-compose share one root `.env` file across every process, and that file's `PORT` is meant only for the API. Reacting to `PORT` alone made the worker try to bind the API's own port and crash locally. The fix follows this project's existing pattern for deployment-only behavior (Google OAuth, Resend, `TRUST_PROXY_HOPS`): off by default, explicit opt-in only where actually needed — set only on the deployed Render worker service, never locally.
 
-## 15. Where to look next
+## 16. Where to look next
 
 - `01-prd.md` / `02-technical-specification.md` — the original product and technical requirements this system was built against.
 - `05-database-schema.md` — full column-by-column schema reference, including the click-event partitioning strategy only summarized here.

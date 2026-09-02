@@ -17,6 +17,9 @@ export interface CreateLinkResponseData {
   createdAt: string;
   expiresAt: string | null;
   wasExistingDuplicate: boolean;
+  utmSource: string | null;
+  utmMedium: string | null;
+  utmCampaign: string | null;
 }
 
 // This is the JSON body returned by GET /api/links, matching Section 11.2.
@@ -53,4 +56,7 @@ export interface GetLinkDetailResponseData {
   createdAt: string;
   expiresAt: string | null;
   totalClicks: number;
+  utmSource: string | null;
+  utmMedium: string | null;
+  utmCampaign: string | null;
 }

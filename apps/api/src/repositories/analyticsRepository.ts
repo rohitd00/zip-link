@@ -52,6 +52,28 @@ export class AnalyticsRepository {
     return Number.parseInt(result.rows[0]?.total_click_count ?? "0", 10);
   }
 
+  /**
+   * Distinct visitor count, approximated by distinct ip_hash values (the
+   * same HMAC-hashed IP already stored for privacy — see ipHasher.ts). A
+   * click recorded with no IP at all (ip_hash IS NULL) cannot contribute to
+   * this count; it still counts toward getTotalClickCount above.
+   */
+  async getUniqueVisitorCount(range: AnalyticsTimeRange): Promise<number> {
+    const result = await this.databasePool.query<{ unique_visitor_count: string }>(
+      `
+        SELECT count(DISTINCT ip_hash) AS unique_visitor_count
+        FROM click_events
+        WHERE link_id = $1
+          AND occurred_at >= $2
+          AND occurred_at < $3
+          AND ip_hash IS NOT NULL;
+      `,
+      [range.linkId, range.from, range.to],
+    );
+
+    return Number.parseInt(result.rows[0]?.unique_visitor_count ?? "0", 10);
+  }
+
   async getTimeline(
     range: AnalyticsTimeRange,
     bucket: AnalyticsBucket,
@@ -134,6 +156,26 @@ export class AnalyticsRepository {
           AND occurred_at >= $2
           AND occurred_at < $3
         GROUP BY browser_name
+        ORDER BY click_count DESC, name ASC
+        LIMIT $4;
+      `,
+      [range.linkId, range.from, range.to, TOP_BREAKDOWN_ROW_LIMIT],
+    );
+
+    return mapNamedCountRows(result.rows);
+  }
+
+  async getOperatingSystemBreakdown(range: AnalyticsTimeRange): Promise<NamedCount[]> {
+    const result = await this.databasePool.query<{ name: string; click_count: string }>(
+      `
+        SELECT
+          COALESCE(os_name, 'Unknown') AS name,
+          count(*) AS click_count
+        FROM click_events
+        WHERE link_id = $1
+          AND occurred_at >= $2
+          AND occurred_at < $3
+        GROUP BY os_name
         ORDER BY click_count DESC, name ASC
         LIMIT $4;
       `,

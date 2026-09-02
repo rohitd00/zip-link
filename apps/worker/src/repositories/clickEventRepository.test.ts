@@ -34,6 +34,7 @@ function buildEvent(
     referrerHost: null,
     deviceType: "desktop",
     browserName: "Chrome",
+    osName: "Windows",
     countryCode: "US",
     countryName: "United States",
     cityName: null,

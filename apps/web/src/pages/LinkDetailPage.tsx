@@ -1,14 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
+  Download,
   Globe2,
   LineChart,
   Monitor,
   MousePointerClick,
   RefreshCw,
   Share2,
+  Users,
 } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import type { AnalyticsResponseData } from "@shared/contracts/analytics";
 import { apiClient } from "../api/apiClient";
 import { BreakdownCard } from "../components/BreakdownCard";
 import { Button } from "../components/Button";
@@ -20,6 +23,10 @@ import { RangeSelector, type RangePreset } from "../components/RangeSelector";
 import { StatusBadge } from "../components/StatusBadge";
 import { buildRangeForPreset } from "../features/analytics/dateRangeHelpers";
 import { useLinkAnalytics } from "../features/analytics/useLinkAnalytics";
+import {
+  computePercentChange,
+  usePeriodComparison,
+} from "../features/analytics/usePeriodComparison";
 import type { GetLinkDetailResponseData } from "@shared/contracts/linkRequests";
 
 type LinkOverviewState =
@@ -39,6 +46,7 @@ export function LinkDetailPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [comparePrevious, setComparePrevious] = useState(false);
 
   // A preset range (e.g. "30 days") always means "the 30 days ending now."
   // Recomputing this anchor moves that window's end forward so the Refresh
@@ -96,10 +104,13 @@ export function LinkDetailPage() {
     () => buildRangeForPreset("30d", rangeAnchorTime),
     [rangeAnchorTime],
   );
+  const effectiveRange = activeRange ?? fallbackRange;
   const { analytics, loadingState, isRefreshing, refresh } = useLinkAnalytics(
     shortCode,
-    activeRange ?? fallbackRange,
+    effectiveRange,
   );
+  const previousPeriodAnalytics = usePeriodComparison(shortCode, effectiveRange, comparePrevious);
+  const exportUrl = apiClient.buildLinkAnalyticsExportUrl(shortCode, effectiveRange);
 
   function handleRefreshClick(): void {
     // A custom range has fixed, user-chosen boundaries that refreshing
@@ -184,13 +195,38 @@ export function LinkDetailPage() {
             ? "No expiry"
             : `Expires ${new Date(link.expiresAt).toLocaleString()}`}
         </p>
+        {(link.utmSource !== null || link.utmMedium !== null || link.utmCampaign !== null) && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {link.utmSource !== null && <UtmBadge label="Source" value={link.utmSource} />}
+            {link.utmMedium !== null && <UtmBadge label="Medium" value={link.utmMedium} />}
+            {link.utmCampaign !== null && <UtmBadge label="Campaign" value={link.utmCampaign} />}
+          </div>
+        )}
       </div>
 
       <div>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-[15px] font-semibold tracking-tight text-text">Analytics</h2>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="flex items-center gap-1.5 text-xs font-medium text-text-muted">
+              <input
+                type="checkbox"
+                checked={comparePrevious}
+                onChange={(event) => setComparePrevious(event.target.checked)}
+                className="h-3.5 w-3.5 accent-accent"
+              />
+              Compare to previous period
+            </label>
             <RangeSelector selectedPreset={rangePreset} onSelectPreset={setRangePreset} />
+            <a
+              href={exportUrl}
+              download
+              aria-label="Export analytics as CSV"
+              title="Export analytics as CSV"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-[var(--radius-control)] border border-border bg-surface text-text-muted shadow-[var(--shadow-card)] transition-colors hover:border-border-strong hover:bg-surface-subtle hover:text-text"
+            >
+              <Download className="h-4 w-4" aria-hidden="true" />
+            </a>
             <button
               type="button"
               onClick={handleRefreshClick}
@@ -245,7 +281,10 @@ export function LinkDetailPage() {
           )}
 
           {loadingState === "loaded" && analytics !== null && (
-            <AnalyticsContent analytics={analytics} />
+            <AnalyticsContent
+              analytics={analytics}
+              previousPeriodAnalytics={comparePrevious ? previousPeriodAnalytics : null}
+            />
           )}
         </div>
       </div>
@@ -274,10 +313,21 @@ export function LinkDetailPage() {
   );
 }
 
+function UtmBadge({ label, value }: { label: string; value: string }) {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full border border-border bg-surface-subtle px-2.5 py-0.5 text-xs text-text-muted">
+      <span className="font-medium text-text">{label}</span>
+      {value}
+    </span>
+  );
+}
+
 function AnalyticsContent({
   analytics,
+  previousPeriodAnalytics,
 }: {
   analytics: NonNullable<ReturnType<typeof useLinkAnalytics>["analytics"]>;
+  previousPeriodAnalytics: AnalyticsResponseData | null;
 }) {
   if (analytics.totalClicks === 0) {
     return (
@@ -290,16 +340,33 @@ function AnalyticsContent({
     );
   }
 
+  const totalClicksPercentChange =
+    previousPeriodAnalytics === null
+      ? undefined
+      : computePercentChange(analytics.totalClicks, previousPeriodAnalytics.totalClicks);
+  const uniqueVisitorsPercentChange =
+    previousPeriodAnalytics === null
+      ? undefined
+      : computePercentChange(analytics.uniqueVisitors, previousPeriodAnalytics.uniqueVisitors);
+
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[240px_1fr]">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-[240px_240px_1fr]">
         <MetricCard
           label="Total clicks"
           value={analytics.totalClicks}
           icon={MousePointerClick}
+          percentChangeVsPrevious={totalClicksPercentChange}
           supportingText={`${new Date(analytics.range.from).toLocaleDateString()} – ${new Date(
             analytics.range.to,
           ).toLocaleDateString()}`}
+        />
+        <MetricCard
+          label="Unique visitors"
+          value={analytics.uniqueVisitors}
+          icon={Users}
+          percentChangeVsPrevious={uniqueVisitorsPercentChange}
+          supportingText="Approximated by distinct hashed IP addresses"
         />
         <div className="rounded-[var(--radius-card)] border border-border bg-surface p-6 shadow-[var(--shadow-card)]">
           <div className="flex items-center gap-2 text-text">
@@ -320,6 +387,7 @@ function AnalyticsContent({
           sections={[
             { label: "Devices", rows: analytics.devices },
             { label: "Browsers", rows: analytics.browsers },
+            { label: "Operating systems", rows: analytics.operatingSystems },
           ]}
         />
         <BreakdownCard

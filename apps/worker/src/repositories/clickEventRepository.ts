@@ -11,6 +11,7 @@ export interface EnrichedClickEvent {
   referrerHost: string | null;
   deviceType: ParsedDeviceType;
   browserName: string | null;
+  osName: string | null;
   countryCode: string | null;
   countryName: string | null;
   cityName: string | null;
@@ -63,13 +64,14 @@ export class ClickEventRepository {
             referrer_host,
             device_type,
             browser_name,
+            os_name,
             country_code,
             country_name,
             city_name,
             ip_hash,
             ip_hash_key_version
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13);
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14);
         `,
         [
           event.occurredAt,
@@ -80,6 +82,7 @@ export class ClickEventRepository {
           event.referrerHost,
           event.deviceType,
           event.browserName,
+          event.osName,
           event.countryCode,
           event.countryName,
           event.cityName,

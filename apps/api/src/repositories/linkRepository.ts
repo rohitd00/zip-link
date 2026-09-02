@@ -8,6 +8,9 @@ export interface CreateGeneratedLinkInput {
   normalizedLongUrl: string;
   ownerContext: OwnerContext;
   expiresAt: Date | null;
+  utmSource: string | null;
+  utmMedium: string | null;
+  utmCampaign: string | null;
 }
 
 export interface CreateCustomAliasLinkInput {
@@ -16,6 +19,9 @@ export interface CreateCustomAliasLinkInput {
   normalizedLongUrl: string;
   ownerContext: OwnerContext;
   expiresAt: Date | null;
+  utmSource: string | null;
+  utmMedium: string | null;
+  utmCampaign: string | null;
 }
 
 export interface ListOwnedLinksOptions {
@@ -73,10 +79,13 @@ export class LinkRepository {
           owner_type,
           owner_id,
           expires_at,
-          is_custom_alias
+          is_custom_alias,
+          utm_source,
+          utm_medium,
+          utm_campaign
         )
         OVERRIDING SYSTEM VALUE
-        VALUES ($1, $2, $3, $4, $5, $6, $7, false)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, false, $8, $9, $10)
         RETURNING *;
       `,
       [
@@ -87,6 +96,9 @@ export class LinkRepository {
         input.ownerContext.ownerType,
         input.ownerContext.ownerId,
         input.expiresAt,
+        input.utmSource,
+        input.utmMedium,
+        input.utmCampaign,
       ],
     );
 
@@ -108,9 +120,12 @@ export class LinkRepository {
           owner_type,
           owner_id,
           expires_at,
-          is_custom_alias
+          is_custom_alias,
+          utm_source,
+          utm_medium,
+          utm_campaign
         )
-        VALUES ($1, $2, $3, $4, $5, $6, true)
+        VALUES ($1, $2, $3, $4, $5, $6, true, $7, $8, $9)
         RETURNING *;
       `,
       [
@@ -120,6 +135,9 @@ export class LinkRepository {
         input.ownerContext.ownerType,
         input.ownerContext.ownerId,
         input.expiresAt,
+        input.utmSource,
+        input.utmMedium,
+        input.utmCampaign,
       ],
     );
 
@@ -329,5 +347,8 @@ function mapDatabaseRowToLinkRecord(rawRow: Record<string, unknown>): LinkDataba
     expiresAt: rawRow.expires_at as Date | null,
     deletedAt: rawRow.deleted_at as Date | null,
     isCustomAlias: Boolean(rawRow.is_custom_alias),
+    utmSource: rawRow.utm_source as string | null,
+    utmMedium: rawRow.utm_medium as string | null,
+    utmCampaign: rawRow.utm_campaign as string | null,
   };
 }

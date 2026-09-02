@@ -138,6 +138,16 @@ export const apiClient = {
     );
   },
 
+  /**
+   * Not fetched with JS — this is a plain URL for an <a> tag, so the
+   * browser's own download handling (and the session cookie, sent
+   * automatically on a same-origin navigation) takes care of the rest.
+   */
+  buildLinkAnalyticsExportUrl(shortCode: string, range: { from: string; to: string }): string {
+    const searchParams = new URLSearchParams({ from: range.from, to: range.to });
+    return `/api/links/${encodeURIComponent(shortCode)}/analytics/export?${searchParams.toString()}`;
+  },
+
   deleteLink(shortCode: string): Promise<void> {
     return sendJsonRequest(`/api/links/${encodeURIComponent(shortCode)}`, {
       method: "DELETE",

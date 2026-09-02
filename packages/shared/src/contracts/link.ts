@@ -20,6 +20,12 @@ export interface LinkDatabaseRow {
   expiresAt: Date | null;
   deletedAt: Date | null;
   isCustomAlias: boolean;
+  // Captured once, from the long URL's own query string, at creation time —
+  // never re-parsed or changed afterward, since the destination URL itself
+  // does not change after a link is created.
+  utmSource: string | null;
+  utmMedium: string | null;
+  utmCampaign: string | null;
 }
 
 // This is the shape returned to an owner through the management API. It

@@ -19,6 +19,7 @@ import { validateFutureExpiryTimestamp } from "../domain/expiryValidation";
 import { hasLinkReachedExpiry } from "../domain/linkState";
 import { buildShortUrl } from "../domain/shortUrlBuilder";
 import { validateAndNormalizeDestinationUrl } from "../domain/urlValidation";
+import { parseUtmParameters, type ParsedUtmParameters } from "../domain/utmParsing";
 import type { LinkRepository } from "../repositories/linkRepository";
 import { isPostgresUniqueViolation } from "../utils/postgresErrors";
 
@@ -49,6 +50,9 @@ export class LinkService {
     const expiresAt = validateFutureExpiryTimestamp(requestBody.expiresAt, currentTime);
     const duplicateHandling = requestBody.duplicateHandling ?? "return_existing";
     const hasRequestedCustomAlias = requestBody.customAlias !== undefined;
+    // Captured once here, from the validated URL — never re-derived later,
+    // since the destination URL itself never changes after creation.
+    const utmParameters = parseUtmParameters(validatedUrl.originalUrl);
 
     if (!hasRequestedCustomAlias && duplicateHandling === "return_existing") {
       const existingLink = await this.linkRepository.findActiveDuplicateByOwnerAndNormalizedUrl(
@@ -70,6 +74,7 @@ export class LinkService {
         requestBody.customAlias as string,
         validatedUrl,
         expiresAt,
+        utmParameters,
       );
 
       await this.cacheNewlyCreatedLink(createdLink, currentTime);
@@ -84,6 +89,7 @@ export class LinkService {
       ownerContext,
       validatedUrl,
       expiresAt,
+      utmParameters,
     );
 
     await this.cacheNewlyCreatedLink(createdLink, currentTime);
@@ -124,6 +130,7 @@ export class LinkService {
     ownerContext: OwnerContext,
     validatedUrl: { originalUrl: string; normalizedUrl: string },
     expiresAt: Date | null,
+    utmParameters: ParsedUtmParameters,
   ): Promise<LinkDatabaseRow> {
     const allocatedLinkId = await this.linkRepository.allocateNextLinkId();
     const generatedShortCode = encodeBase62(allocatedLinkId);
@@ -134,6 +141,7 @@ export class LinkService {
       normalizedLongUrl: validatedUrl.normalizedUrl,
       ownerContext,
       expiresAt,
+      ...utmParameters,
     });
   }
 
@@ -142,6 +150,7 @@ export class LinkService {
     rawCustomAlias: string,
     validatedUrl: { originalUrl: string; normalizedUrl: string },
     expiresAt: Date | null,
+    utmParameters: ParsedUtmParameters,
   ): Promise<LinkDatabaseRow> {
     const validatedAlias = validateCustomAliasFormat(rawCustomAlias);
 
@@ -152,6 +161,7 @@ export class LinkService {
         normalizedLongUrl: validatedUrl.normalizedUrl,
         ownerContext,
         expiresAt,
+        ...utmParameters,
       });
     } catch (thrownError) {
       if (isPostgresUniqueViolation(thrownError)) {
@@ -219,6 +229,9 @@ export class LinkService {
       createdAt: link.createdAt.toISOString(),
       expiresAt: link.expiresAt === null ? null : link.expiresAt.toISOString(),
       totalClicks,
+      utmSource: link.utmSource,
+      utmMedium: link.utmMedium,
+      utmCampaign: link.utmCampaign,
     };
   }
 
@@ -302,6 +315,9 @@ function mapLinkRecordToCreateResponse(
     createdAt: link.createdAt.toISOString(),
     expiresAt: link.expiresAt === null ? null : link.expiresAt.toISOString(),
     wasExistingDuplicate,
+    utmSource: link.utmSource,
+    utmMedium: link.utmMedium,
+    utmCampaign: link.utmCampaign,
   };
 }
 

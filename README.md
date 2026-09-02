@@ -26,9 +26,12 @@ isn't a claim left untested — it's [measured below](#benchmarks).
   fallback on a miss or cache outage — a redirect is never wrong, only occasionally slower.
 - **Generated codes or custom aliases**, with duplicate-link detection (creating the same
   destination twice returns the existing link instead of a new one) and optional expiry.
-- **Real click analytics**, not a single counter: total clicks, a time-bucketed timeline
-  chart, top referrers, a combined devices/browsers breakdown, and approximate
-  country/city geography — all queryable over any date range.
+- **Real click analytics**, not a single counter: total clicks, approximate unique
+  visitors, a time-bucketed timeline chart, top referrers, device/browser/OS breakdowns,
+  and approximate country/city geography — all queryable over any date range, with
+  period-over-period comparison and a one-click CSV export of every breakdown.
+- **UTM/campaign tracking.** `utm_source`/`utm_medium`/`utm_campaign` are captured once
+  from a link's destination URL at creation time and shown on its detail page.
 - **Analytics can never slow a redirect.** Click processing happens on a separate queue and
   worker; a redirect response goes out before any enrichment work even starts. Proven, not
   assumed — [see the benchmark](#benchmarks).
@@ -199,10 +202,12 @@ Roughly in the order they'd matter for handling real traffic:
 3. **Dimension rollups + a hybrid raw/rollup analytics read path**, once real usage shows
    a large or repeated-range query is actually slow.
 4. **Automated retention/cleanup job** for old partitions and dedupe rows.
-5. **Real authentication**, as an alternative to anonymous-session link ownership, for
-   anyone who wants links to survive across devices/browsers.
+5. **A cross-link analytics dashboard** — an owner-scoped aggregate view across every link
+   they own, not just one link at a time. `OwnerContext` already scopes every link to its
+   owner, so this is a new query, not new plumbing.
 6. **Product features beyond the MVP scope**: custom domains, QR codes, link tagging/
-   folders, bulk operations.
+   folders, bulk operations, a live click feed (Server-Sent Events) on the link detail
+   page.
 
 ## Quick start
 

@@ -45,5 +45,12 @@ export function createLinksRoutes(
     ),
   );
 
+  router.get(
+    "/api/links/:code/analytics/export",
+    asyncRouteHandler((request, response) =>
+      analyticsController.exportLinkAnalyticsCsv(request, response),
+    ),
+  );
+
   return router;
 }

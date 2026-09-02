@@ -20,6 +20,9 @@ const sampleLinkRow: LinkDatabaseRow = {
   expiresAt: null,
   deletedAt: null,
   isCustomAlias: false,
+  utmSource: null,
+  utmMedium: null,
+  utmCampaign: null,
 };
 
 function buildFakeLinkRepository(overrides: Partial<LinkRepository> = {}): LinkRepository {

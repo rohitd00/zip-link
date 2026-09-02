@@ -30,9 +30,11 @@ export interface TestClickEventInput {
   referrerHost?: string | null;
   deviceType?: "desktop" | "mobile" | "tablet" | "bot" | "unknown";
   browserName?: string | null;
+  osName?: string | null;
   countryCode?: string | null;
   countryName?: string | null;
   cityName?: string | null;
+  ipHash?: string | null;
 }
 
 /**
@@ -42,13 +44,16 @@ export interface TestClickEventInput {
  * of running the full queue/worker pipeline for every test case.
  */
 export async function insertTestClickEvent(pool: Pool, input: TestClickEventInput): Promise<void> {
+  const ipHash = input.ipHash ?? null;
+
   await pool.query(
     `
       INSERT INTO click_events (
         occurred_at, event_id, link_id, short_code, referrer_host,
-        device_type, browser_name, country_code, country_name, city_name
+        device_type, browser_name, os_name, country_code, country_name, city_name,
+        ip_hash, ip_hash_key_version
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10);
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13);
     `,
     [
       input.occurredAt,
@@ -58,9 +63,12 @@ export async function insertTestClickEvent(pool: Pool, input: TestClickEventInpu
       input.referrerHost ?? null,
       input.deviceType ?? "unknown",
       input.browserName ?? null,
+      input.osName ?? null,
       input.countryCode ?? null,
       input.countryName ?? null,
       input.cityName ?? null,
+      ipHash,
+      ipHash === null ? null : "v1",
     ],
   );
 }

@@ -16,6 +16,7 @@ export type ParsedDeviceType = "desktop" | "mobile" | "tablet" | "bot" | "unknow
 export interface ParsedUserAgent {
   deviceType: ParsedDeviceType;
   browserName: string | null;
+  osName: string | null;
 }
 
 /**
@@ -26,7 +27,7 @@ export interface ParsedUserAgent {
  */
 export function parseUserAgent(rawUserAgent: string | null): ParsedUserAgent {
   if (rawUserAgent === null || rawUserAgent.trim().length === 0) {
-    return { deviceType: "unknown", browserName: null };
+    return { deviceType: "unknown", browserName: null, osName: null };
   }
 
   const boundedUserAgent = rawUserAgent.slice(0, MAX_USER_AGENT_INPUT_LENGTH_CHARACTERS);
@@ -34,14 +35,15 @@ export function parseUserAgent(rawUserAgent: string | null): ParsedUserAgent {
   try {
     const parseResult = new UAParser(boundedUserAgent).getResult();
     const browserName = parseResult.browser.name ?? null;
+    const osName = parseResult.os.name ?? null;
 
     if (BOT_USER_AGENT_PATTERN.test(boundedUserAgent)) {
-      return { deviceType: "bot", browserName };
+      return { deviceType: "bot", browserName, osName };
     }
 
-    return { deviceType: mapDeviceType(parseResult.device.type), browserName };
+    return { deviceType: mapDeviceType(parseResult.device.type), browserName, osName };
   } catch {
-    return { deviceType: "unknown", browserName: null };
+    return { deviceType: "unknown", browserName: null, osName: null };
   }
 }
 

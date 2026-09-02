@@ -77,6 +77,9 @@ describe("CreateLinkForm", () => {
         createdAt: new Date().toISOString(),
         expiresAt: null,
         wasExistingDuplicate: false,
+        utmSource: null,
+        utmMedium: null,
+        utmCampaign: null,
       },
     });
 
@@ -105,6 +108,9 @@ describe("CreateLinkForm", () => {
         createdAt: new Date().toISOString(),
         expiresAt: null,
         wasExistingDuplicate: true,
+        utmSource: null,
+        utmMedium: null,
+        utmCampaign: null,
       },
     });
 

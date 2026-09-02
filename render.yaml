@@ -76,6 +76,11 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      # Opts into apps/worker/src/healthServer.ts binding $PORT -- never set
+      # this locally or in docker-compose (see that file's own comment on
+      # why it isn't gated on PORT alone).
+      - key: ENABLE_WORKER_HTTP_HEALTH_SERVER
+        value: "true"
       - key: DATABASE_URL
         sync: false
       - key: REDIS_URL

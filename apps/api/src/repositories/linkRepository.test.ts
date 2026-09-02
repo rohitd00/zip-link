@@ -36,6 +36,9 @@ async function insertGeneratedLink(
     normalizedLongUrl: overrides.normalizedLongUrl ?? longUrl,
     ownerContext,
     expiresAt: overrides.expiresAt ?? null,
+    utmSource: null,
+    utmMedium: null,
+    utmCampaign: null,
   });
 }
 
@@ -57,6 +60,9 @@ describe("LinkRepository", () => {
       normalizedLongUrl: "https://example.com/one",
       ownerContext: ownerA,
       expiresAt: null,
+      utmSource: null,
+      utmMedium: null,
+      utmCampaign: null,
     });
 
     expect(firstLink.shortCode).toBe("launch-2026");
@@ -69,6 +75,9 @@ describe("LinkRepository", () => {
         normalizedLongUrl: "https://example.com/two",
         ownerContext: ownerB,
         expiresAt: null,
+        utmSource: null,
+        utmMedium: null,
+        utmCampaign: null,
       }),
     ).rejects.toMatchObject({ code: "23505" });
   });

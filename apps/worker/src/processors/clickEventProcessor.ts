@@ -34,7 +34,7 @@ export async function processClickEventJob(
   const payload = parsePayloadOrFailPermanently(job);
 
   const { referrer, referrerHost } = normalizeReferrer(payload.referrer);
-  const { deviceType, browserName } = parseUserAgent(payload.userAgent);
+  const { deviceType, browserName, osName } = parseUserAgent(payload.userAgent);
   const { countryCode, countryName, cityName } = lookupGeography(payload.clientIpAddress);
 
   const hashedIp =
@@ -55,6 +55,7 @@ export async function processClickEventJob(
     referrerHost,
     deviceType,
     browserName,
+    osName,
     countryCode,
     countryName,
     cityName,

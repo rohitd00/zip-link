@@ -388,7 +388,7 @@ genuinely-free combination that covers all of them:
 | --- | --- | --- |
 | Dashboard (`apps/web`) | Vercel | Static hosting, never sleeps (no cold start), and supports the rewrite trick below |
 | API (`apps/api`) | Render (free Web Service) | Runs Node directly; free tier sleeps after ~15 minutes idle (30–60s cold start on the next request — an honest, acceptable trade-off for a free demo) |
-| Analytics worker (`apps/worker`) | Render (free Web Service) | Render discontinued its free Background Worker plan; the worker now optionally binds `$PORT` (see `apps/worker/src/healthServer.ts`) purely so it qualifies as a free Web Service — it does no real HTTP work either way, and this server never starts locally or in docker-compose since `PORT` is never set for this process there |
+| Analytics worker (`apps/worker`) | Render (free Web Service) | Render discontinued its free Background Worker plan; the worker now optionally binds `$PORT` (see `apps/worker/src/healthServer.ts`) purely so it qualifies as a free Web Service — it does no real HTTP work either way. Gated on its own `ENABLE_WORKER_HTTP_HEALTH_SERVER=true` opt-in flag, not on `PORT` being present: local development and docker-compose share one root `.env` file across every process, and that file's `PORT` is meant only for the API — reacting to `PORT` alone would make the worker try to bind the API's own port and crash. Set this flag only on the deployed Render worker service, never locally. |
 | PostgreSQL | [Neon](https://neon.tech) | A genuinely free tier with no forced expiry |
 | Redis | [Upstash](https://upstash.com) | Free tier, and — importantly — speaks the real Redis protocol over a normal connection (use the `rediss://` connection string it gives you, not its separate REST API), so BullMQ works against it unmodified |
 
@@ -491,7 +491,8 @@ as a short code.
 | `GET`    | `/api/links`                 | List the current owner's active links, newest first, with cursor pagination and optional search.                                                                                                                                                                                                                                                                                                                          |
 | `GET`    | `/api/links/:code`           | Read one owned link's metadata and click count.                                                                                                                                                                                                                                                                                                                                                                           |
 | `DELETE` | `/api/links/:code`           | Soft-delete an owned link. Idempotent; returns a generic 404 for a link you don't own.                                                                                                                                                                                                                                                                                                                                    |
-| `GET`    | `/api/links/:code/analytics` | Totals, timeline, and referrer/device/browser/geography breakdowns for an owned link. See [Analytics query API](#analytics-query-api) below.                                                                                                                                                                                                                                                                              |
+| `GET`    | `/api/links/:code/analytics` | Totals, unique visitors, timeline, and referrer/device/browser/OS/geography breakdowns for an owned link. See [Analytics query API](#analytics-query-api) below.                                                                                                                                                                                                                                                          |
+| `GET`    | `/api/links/:code/analytics/export` | Same authorization, validation, and data as the endpoint above, serialized as a multi-section CSV file (`Content-Disposition: attachment`) instead of JSON. Exports aggregate breakdowns only — never a per-click row — matching this project's stance of not exposing click-level data even to a link's own owner.                                                                                             |
 | `GET`    | `/:code`                     | Public redirect. Cache-aside: checks Redis first, falls back to PostgreSQL on a miss or Redis error, and backfills the cache. On success, also publishes a click-analytics job to BullMQ (bounded to a 500ms budget; a queue failure or timeout never blocks the redirect). `302` on success, `404` for unknown/deleted, `410` for expired. Add `Accept: application/json` for a JSON error body instead of an HTML page. |
 | `GET`    | `/health/live`               | Liveness — process is responding. Never touches a dependency.                                                                                                                                                                                                                                                                                                                                                             |
 | `GET`    | `/health/ready`              | Readiness — `{ "status": "ok" \| "unavailable", "dependencies": { "database": "ok" \| "unavailable", "cache": "ok" \| "degraded" } }`. Only a PostgreSQL failure returns `503`; Redis being down is reported as `"degraded"` but does not fail readiness, since redirects still work (just slower) without it.                                                                                                            |
@@ -530,10 +531,12 @@ returns a generic `404` without ever touching `click_events`. Response shape:
     "link": { "shortCode": "w7e", "shortUrl": "...", "longUrl": "..." },
     "range": { "from": "...", "to": "...", "timezone": "UTC", "bucket": "day" },
     "totalClicks": 42,
+    "uniqueVisitors": 31,
     "timeline": [{ "bucketStart": "...", "clickCount": 5 }],
     "referrers": [{ "name": "news.example.com", "clickCount": 20 }],
     "devices": [{ "name": "mobile", "clickCount": 30 }],
     "browsers": [{ "name": "Chrome", "clickCount": 25 }],
+    "operatingSystems": [{ "name": "iOS", "clickCount": 25 }],
     "geography": [{ "country": "United States", "city": "Chicago", "clickCount": 10 }],
     "freshness": { "isEventuallyConsistent": true, "lastRollupAt": null }
   }
@@ -549,6 +552,17 @@ Notes:
   (or `null` if it has never run) — informational metadata about the rollup job, not about
   this response's own data. `isEventuallyConsistent` is always `true`, honestly reflecting
   that the worker may not have finished processing the most recent clicks yet.
+- **`uniqueVisitors` is an approximation**, not an exact per-person count: it's
+  `COUNT(DISTINCT ip_hash)` over the range, using the same HMAC-hashed IP already stored
+  for privacy (see [Privacy and security behavior](#privacy-and-security-behavior-implemented-so-far)).
+  This undercounts uniqueness behind shared/mobile NAT and overcounts if one visitor's IP
+  changes between visits; a click with no IP at all cannot contribute to this count (it
+  still counts toward `totalClicks`).
+- **`POST /api/links` and `GET /api/links/:code` also return `utmSource`/`utmMedium`/
+  `utmCampaign`** (each nullable) — parsed once from the destination URL's own
+  `utm_source`/`utm_medium`/`utm_campaign` query parameters at creation time, and never
+  re-derived afterward. A link created without any UTM parameters in its long URL has all
+  three fields `null`.
 - **Geography is privacy-thresholded.** A city with fewer than 3 events in the requested
   range is folded into its country (`city: null`) rather than shown on its own — a
   handful of clicks from one named city could otherwise identify a specific small group

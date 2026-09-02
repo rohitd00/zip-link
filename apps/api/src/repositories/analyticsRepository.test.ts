@@ -34,6 +34,9 @@ async function insertLink(shortCode: string): Promise<string> {
     normalizedLongUrl: "https://example.com/page",
     ownerContext: { ownerType: "anonymous_session", ownerId: "test-owner" },
     expiresAt: null,
+    utmSource: null,
+    utmMedium: null,
+    utmCampaign: null,
   });
 
   return link.id;
@@ -171,6 +174,67 @@ describe("AnalyticsRepository", () => {
     expect(devices).toContainEqual({ name: "desktop", clickCount: 1 });
     expect(browsers).toContainEqual({ name: "Safari", clickCount: 1 });
     expect(browsers).toContainEqual({ name: "Unknown", clickCount: 1 });
+  });
+
+  it("counts distinct ip_hash values as unique visitors, ignoring repeat clicks and null hashes", async () => {
+    const linkId = await insertLink("uuu");
+    await insertTestClickEvent(pool, {
+      linkId,
+      shortCode: "uuu",
+      occurredAt: new Date("2026-09-01T12:00:00.000Z"),
+      ipHash: "hash-a",
+    });
+    // Same visitor clicking again -- must not be counted twice.
+    await insertTestClickEvent(pool, {
+      linkId,
+      shortCode: "uuu",
+      occurredAt: new Date("2026-09-01T13:00:00.000Z"),
+      ipHash: "hash-a",
+    });
+    await insertTestClickEvent(pool, {
+      linkId,
+      shortCode: "uuu",
+      occurredAt: new Date("2026-09-01T14:00:00.000Z"),
+      ipHash: "hash-b",
+    });
+    // No IP at all -- must not contribute to the unique count.
+    await insertTestClickEvent(pool, {
+      linkId,
+      shortCode: "uuu",
+      occurredAt: new Date("2026-09-01T15:00:00.000Z"),
+      ipHash: null,
+    });
+
+    const totalClicks = await analyticsRepository.getTotalClickCount({ linkId, from, to });
+    const uniqueVisitors = await analyticsRepository.getUniqueVisitorCount({ linkId, from, to });
+
+    expect(totalClicks).toBe(4);
+    expect(uniqueVisitors).toBe(2);
+  });
+
+  it("breaks down operating systems, labeling a missing value as Unknown", async () => {
+    const linkId = await insertLink("ooo");
+    await insertTestClickEvent(pool, {
+      linkId,
+      shortCode: "ooo",
+      occurredAt: new Date("2026-09-01T12:00:00.000Z"),
+      osName: "Windows",
+    });
+    await insertTestClickEvent(pool, {
+      linkId,
+      shortCode: "ooo",
+      occurredAt: new Date("2026-09-01T13:00:00.000Z"),
+      osName: null,
+    });
+
+    const operatingSystems = await analyticsRepository.getOperatingSystemBreakdown({
+      linkId,
+      from,
+      to,
+    });
+
+    expect(operatingSystems).toContainEqual({ name: "Windows", clickCount: 1 });
+    expect(operatingSystems).toContainEqual({ name: "Unknown", clickCount: 1 });
   });
 
   it("breaks down geography by country and city", async () => {

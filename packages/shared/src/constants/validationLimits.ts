@@ -33,3 +33,8 @@ export const MAX_EMAIL_LENGTH_CHARACTERS = 320; // the RFC 5321 maximum
 export const MIN_PASSWORD_LENGTH_CHARACTERS = 8;
 export const MAX_PASSWORD_LENGTH_CHARACTERS = 200;
 export const MAX_DISPLAY_NAME_LENGTH_CHARACTERS = 200;
+
+// Matches the utm_* columns' varchar(255) width on `links`. A value longer
+// than this is truncated, not rejected — UTM capture is best-effort
+// metadata, not something a link creation request should ever fail over.
+export const MAX_UTM_PARAM_LENGTH_CHARACTERS = 255;
