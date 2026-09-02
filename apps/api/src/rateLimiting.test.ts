@@ -25,8 +25,15 @@ beforeAll(() => {
     redirectCacheTtlSeconds: 86400,
     createRateLimitMaxRequests: 2,
     createRateLimitWindowSeconds: 60,
+    authRateLimitMaxRequests: 1000,
+    authRateLimitWindowSeconds: 900,
     isProductionEnvironment: false,
     trustProxyHops: 0,
+    dashboardBaseUrl: "https://dashboard.test",
+    googleOAuthClientId: null,
+    googleOAuthClientSecret: null,
+    resendApiKey: null,
+    emailFromAddress: "ZipLink <test@ziplink.test>",
   });
 });
 

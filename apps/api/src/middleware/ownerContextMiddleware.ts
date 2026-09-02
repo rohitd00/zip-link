@@ -21,6 +21,15 @@ declare global {
  * one is missing or fails signature verification. This never throws: an
  * invalid cookie is treated the same as a missing one, per Section 5 of
  * app-flow.md.
+ *
+ * If `sessionMiddleware` (registered before this one, in app.ts) already
+ * found a real signed-in user for this request, that takes priority over
+ * the anonymous cookie entirely — a signed-in visitor's links use
+ * ownerType "authenticated_user" with their real user ID, not their
+ * anonymous cookie identity. This is the only place account support
+ * touches link ownership: LinkRepository/LinkService/RedirectService never
+ * needed to change at all, since they only ever depended on this generic
+ * OwnerContext shape.
  */
 export function createOwnerContextMiddleware(isProductionEnvironment: boolean) {
   return function ownerContextMiddleware(
@@ -28,6 +37,15 @@ export function createOwnerContextMiddleware(isProductionEnvironment: boolean) {
     response: Response,
     next: NextFunction,
   ): void {
+    if (request.authenticatedUser !== undefined) {
+      request.ownerContext = {
+        ownerType: "authenticated_user",
+        ownerId: request.authenticatedUser.id,
+      };
+      next();
+      return;
+    }
+
     const signedCookieValue = request.signedCookies[OWNER_COOKIE_NAME] as string | undefined;
 
     const ownerId = signedCookieValue ?? crypto.randomUUID();

@@ -8,7 +8,10 @@ export type ApplicationErrorCode =
   | "NOT_FOUND"
   | "LINK_EXPIRED"
   | "SERVICE_UNAVAILABLE"
-  | "INTERNAL_ERROR";
+  | "INTERNAL_ERROR"
+  | "EMAIL_ALREADY_IN_USE"
+  | "INVALID_CREDENTIALS"
+  | "INVALID_OR_EXPIRED_TOKEN";
 
 export interface ApplicationErrorFieldDetail {
   field: string;

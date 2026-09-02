@@ -20,8 +20,29 @@ export interface ApiEnvironmentConfig {
   redirectCacheTtlSeconds: number;
   createRateLimitMaxRequests: number;
   createRateLimitWindowSeconds: number;
+  authRateLimitMaxRequests: number;
+  authRateLimitWindowSeconds: number;
   logLevel: string;
   trustProxyHops: number;
+  // Where the dashboard (apps/web) is actually served from — used only to
+  // build links that point *at* the dashboard from outside it, such as a
+  // password-reset email. This is deliberately separate from
+  // publicBaseUrl, which is the API's own base URL (used to build short
+  // links) — in production these are two different domains (the dashboard
+  // on Vercel, the API on Render), so conflating them would build broken
+  // email links.
+  dashboardBaseUrl: string;
+  // Google OAuth ("Sign in with Google") is optional: unset in local
+  // development, this simply means that one sign-in method is
+  // unavailable, not that the app fails to start — see
+  // authController.ts's handling of a missing client ID/secret.
+  googleOAuthClientId: string | null;
+  googleOAuthClientSecret: string | null;
+  // Outgoing transactional email (welcome messages, password resets) is
+  // also optional — see EmailService's own comment for what happens
+  // locally without it configured.
+  resendApiKey: string | null;
+  emailFromAddress: string;
 }
 
 class MissingEnvironmentVariableError extends Error {
@@ -51,6 +72,20 @@ function readOptionalStringVariable(variableName: string, defaultValue: string):
 
   if (rawValue === undefined || rawValue.trim().length === 0) {
     return defaultValue;
+  }
+
+  return rawValue;
+}
+
+// Unlike readOptionalStringVariable, this has no default — an unset value
+// means "this optional feature is turned off," which the caller checks
+// for explicitly (rather than silently falling back to some placeholder
+// string that would look configured but isn't).
+function readOptionalNullableStringVariable(variableName: string): string | null {
+  const rawValue = process.env[variableName];
+
+  if (rawValue === undefined || rawValue.trim().length === 0) {
+    return null;
   }
 
   return rawValue;
@@ -147,6 +182,19 @@ export function loadApiEnvironmentConfig(): ApiEnvironmentConfig {
     "Set CREATE_RATE_LIMIT_WINDOW_SECONDS to the length, in seconds, of the creation rate-limit window.",
   );
 
+  const authRateLimitMaxRequests = readOptionalNonNegativeIntegerVariable(
+    "AUTH_RATE_LIMIT_MAX_REQUESTS",
+    10,
+    "Set AUTH_RATE_LIMIT_MAX_REQUESTS to the number of login/signup/password-reset attempts " +
+      "allowed per window (a separate limit from link creation).",
+  );
+
+  const authRateLimitWindowSeconds = readOptionalNonNegativeIntegerVariable(
+    "AUTH_RATE_LIMIT_WINDOW_SECONDS",
+    900,
+    "Set AUTH_RATE_LIMIT_WINDOW_SECONDS to the length, in seconds, of the auth rate-limit window.",
+  );
+
   const logLevel = readOptionalStringVariable("LOG_LEVEL", "info");
 
   const trustProxyHops = readOptionalNonNegativeIntegerVariable(
@@ -156,6 +204,20 @@ export function loadApiEnvironmentConfig(): ApiEnvironmentConfig {
       "(for example 1 on most platform-as-a-service hosts), so request.ip reads the real visitor " +
       "address from X-Forwarded-For instead of the proxy's own address. Leave unset (0) when " +
       "nothing sits in front of this process, such as local development.",
+  );
+
+  const dashboardBaseUrl = readOptionalStringVariable(
+    "DASHBOARD_BASE_URL",
+    "http://localhost:5173",
+  );
+
+  const googleOAuthClientId = readOptionalNullableStringVariable("GOOGLE_OAUTH_CLIENT_ID");
+  const googleOAuthClientSecret = readOptionalNullableStringVariable("GOOGLE_OAUTH_CLIENT_SECRET");
+
+  const resendApiKey = readOptionalNullableStringVariable("RESEND_API_KEY");
+  const emailFromAddress = readOptionalStringVariable(
+    "EMAIL_FROM_ADDRESS",
+    "ZipLink <onboarding@resend.dev>",
   );
 
   return {
@@ -168,7 +230,14 @@ export function loadApiEnvironmentConfig(): ApiEnvironmentConfig {
     redirectCacheTtlSeconds,
     createRateLimitMaxRequests,
     createRateLimitWindowSeconds,
+    authRateLimitMaxRequests,
+    authRateLimitWindowSeconds,
     logLevel,
     trustProxyHops,
+    dashboardBaseUrl,
+    googleOAuthClientId,
+    googleOAuthClientSecret,
+    resendApiKey,
+    emailFromAddress,
   };
 }

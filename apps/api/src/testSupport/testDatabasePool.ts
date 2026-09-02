@@ -81,7 +81,10 @@ export async function truncateAllTestData(pool: Pool): Promise<void> {
       analytics_rollup_checkpoints,
       analytics_event_deduplication,
       click_events,
-      links
+      links,
+      password_reset_tokens,
+      sessions,
+      users
     RESTART IDENTITY CASCADE;
   `);
 }

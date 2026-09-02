@@ -22,11 +22,13 @@
     "seed": "tsx scripts/seedSampleData.ts"
   },
   "dependencies": {
+    "bcryptjs": "^3.0.3",
     "bullmq": "^6.3.4",
     "cookie-parser": "^1.4.7",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "geoip-lite": "^2.0.3",
+    "google-auth-library": "^11.0.2",
     "helmet": "^8.0.0",
     "ioredis": "^6.0.0",
     "lucide-react": "^1.39.0",
@@ -43,6 +45,7 @@
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.6",
+    "@types/bcryptjs": "^2.4.6",
     "@types/cookie-parser": "^1.4.8",
     "@types/express": "^5.0.0",
     "@types/geoip-lite": "^1.4.4",

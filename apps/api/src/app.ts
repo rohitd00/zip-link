@@ -4,29 +4,41 @@ import express, { type Express } from "express";
 import helmet from "helmet";
 import type Redis from "ioredis";
 import type { Pool } from "pg";
+import { AuthRateLimiter } from "./cache/authRateLimiter";
 import { CreationRateLimiter } from "./cache/creationRateLimiter";
 import { RedirectCacheRepository } from "./cache/redirectCacheRepository";
 import { AnalyticsController } from "./controllers/analyticsController";
+import { AuthController } from "./controllers/authController";
 import { HealthController } from "./controllers/healthController";
 import { LinksController } from "./controllers/linksController";
 import { MetricsController } from "./controllers/metricsController";
 import { RedirectController } from "./controllers/redirectController";
+import { createAuthRateLimitMiddleware } from "./middleware/authRateLimitMiddleware";
 import { createCreationRateLimitMiddleware } from "./middleware/creationRateLimitMiddleware";
 import { errorHandlerMiddleware } from "./middleware/errorHandlerMiddleware";
 import { createOwnerContextMiddleware } from "./middleware/ownerContextMiddleware";
 import { requestIdMiddleware } from "./middleware/requestIdMiddleware";
 import { requestLoggingMiddleware } from "./middleware/requestLoggingMiddleware";
+import { createSessionMiddleware } from "./middleware/sessionMiddleware";
 import { ClickEventPublisher } from "./queue/clickEventPublisher";
 import { AnalyticsRepository } from "./repositories/analyticsRepository";
 import { LinkRepository } from "./repositories/linkRepository";
+import { PasswordResetTokenRepository } from "./repositories/passwordResetTokenRepository";
 import { RollupCheckpointRepository } from "./repositories/rollupCheckpointRepository";
+import { SessionRepository } from "./repositories/sessionRepository";
+import { UserRepository } from "./repositories/userRepository";
+import { createAuthRoutes } from "./routes/authRoutes";
 import { createHealthRoutes } from "./routes/healthRoutes";
 import { createLinksRoutes } from "./routes/linksRoutes";
 import { createMetricsRoutes } from "./routes/metricsRoutes";
 import { createRedirectRoutes } from "./routes/redirectRoutes";
 import { AnalyticsService } from "./services/analyticsService";
+import { AuthService } from "./services/authService";
+import { EmailService } from "./services/emailService";
+import { GoogleOAuthService } from "./services/googleOAuthService";
 import { LinkService } from "./services/linkService";
 import { RedirectService } from "./services/redirectService";
+import { SessionService } from "./services/sessionService";
 
 const MAX_JSON_REQUEST_BODY_SIZE = "10kb";
 
@@ -41,6 +53,13 @@ export interface BuildApiAppOptions {
   createRateLimitWindowSeconds: number;
   isProductionEnvironment: boolean;
   trustProxyHops: number;
+  dashboardBaseUrl: string;
+  authRateLimitMaxRequests: number;
+  authRateLimitWindowSeconds: number;
+  googleOAuthClientId: string | null;
+  googleOAuthClientSecret: string | null;
+  resendApiKey: string | null;
+  emailFromAddress: string;
 }
 
 /**
@@ -54,10 +73,18 @@ export function buildApiApp(options: BuildApiAppOptions): Express {
   const analyticsRepository = new AnalyticsRepository(options.databasePool);
   const rollupCheckpointRepository = new RollupCheckpointRepository(options.databasePool);
   const redirectCacheRepository = new RedirectCacheRepository(options.redisClient);
+  const userRepository = new UserRepository(options.databasePool);
+  const sessionRepository = new SessionRepository(options.databasePool);
+  const passwordResetTokenRepository = new PasswordResetTokenRepository(options.databasePool);
   const creationRateLimiter = new CreationRateLimiter(
     options.redisClient,
     options.createRateLimitMaxRequests,
     options.createRateLimitWindowSeconds,
+  );
+  const authRateLimiter = new AuthRateLimiter(
+    options.redisClient,
+    options.authRateLimitMaxRequests,
+    options.authRateLimitWindowSeconds,
   );
   const clickEventPublisher = new ClickEventPublisher(options.clickEventQueue);
 
@@ -79,11 +106,46 @@ export function buildApiApp(options: BuildApiAppOptions): Express {
     rollupCheckpointRepository,
   );
 
+  const sessionService = new SessionService(sessionRepository);
+  const emailService = new EmailService(options.resendApiKey, options.emailFromAddress);
+
+  // Google sign-in is entirely optional: without both a client ID and
+  // secret configured, GoogleOAuthService is simply never constructed,
+  // and AuthService/AuthController fall back to returning a clear
+  // "not configured" error for the two Google-specific routes rather than
+  // failing to start at all. This matters most for local development,
+  // where nobody should need Google Cloud credentials just to run the app
+  // and test email/password sign-in.
+  const isGoogleSignInConfigured =
+    options.googleOAuthClientId !== null && options.googleOAuthClientSecret !== null;
+  const googleOAuthService = isGoogleSignInConfigured
+    ? new GoogleOAuthService(
+        options.googleOAuthClientId as string,
+        options.googleOAuthClientSecret as string,
+        `${options.publicBaseUrl}/api/auth/google/callback`,
+      )
+    : null;
+
+  const authService = new AuthService(
+    userRepository,
+    sessionService,
+    passwordResetTokenRepository,
+    emailService,
+    googleOAuthService,
+    options.dashboardBaseUrl,
+  );
+
   const healthController = new HealthController(options.databasePool, options.redisClient);
   const metricsController = new MetricsController(options.clickEventQueue);
   const linksController = new LinksController(linkService);
   const analyticsController = new AnalyticsController(analyticsService);
   const redirectController = new RedirectController(redirectService, clickEventPublisher);
+  const authController = new AuthController(
+    authService,
+    options.isProductionEnvironment,
+    options.dashboardBaseUrl,
+    isGoogleSignInConfigured,
+  );
 
   const app = express();
 
@@ -110,7 +172,13 @@ export function buildApiApp(options: BuildApiAppOptions): Express {
   app.use(createHealthRoutes(healthController));
   app.use(createMetricsRoutes(metricsController));
 
+  // Session lookup runs before owner-context resolution, since a signed-in
+  // user's identity (if any) takes priority over the anonymous cookie —
+  // see ownerContextMiddleware.ts's own comment on this order.
+  app.use(createSessionMiddleware(sessionRepository, userRepository));
   app.use(createOwnerContextMiddleware(options.isProductionEnvironment));
+
+  app.use(createAuthRoutes(authController, createAuthRateLimitMiddleware(authRateLimiter)));
   app.use(
     createLinksRoutes(
       linksController,

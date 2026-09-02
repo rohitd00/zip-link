@@ -117,7 +117,7 @@ export function LinkDetailPage() {
 
     try {
       await apiClient.deleteLink(shortCode);
-      navigate("/", { state: { deletedShortCode: shortCode } });
+      navigate("/dashboard", { state: { deletedShortCode: shortCode } });
     } catch {
       setDeleteError("Couldn't delete this link. Please try again.");
       setIsDeleting(false);
@@ -136,7 +136,10 @@ export function LinkDetailPage() {
         <p className="mt-1 text-sm text-text-muted">
           It may have been removed, or you may not have access to it.
         </p>
-        <Link to="/" className="mt-4 inline-block text-sm font-medium text-accent hover:underline">
+        <Link
+          to="/dashboard"
+          className="mt-4 inline-block text-sm font-medium text-accent hover:underline"
+        >
           Back to your links
         </Link>
       </div>
@@ -154,7 +157,7 @@ export function LinkDetailPage() {
     <div className="flex flex-col gap-8">
       <div>
         <Link
-          to="/"
+          to="/dashboard"
           className="inline-flex items-center gap-1 text-sm font-medium text-text-muted transition-colors hover:text-text"
         >
           <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />

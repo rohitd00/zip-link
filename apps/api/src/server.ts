@@ -22,8 +22,15 @@ function startApiServer(): void {
     redirectCacheTtlSeconds: config.redirectCacheTtlSeconds,
     createRateLimitMaxRequests: config.createRateLimitMaxRequests,
     createRateLimitWindowSeconds: config.createRateLimitWindowSeconds,
+    authRateLimitMaxRequests: config.authRateLimitMaxRequests,
+    authRateLimitWindowSeconds: config.authRateLimitWindowSeconds,
     isProductionEnvironment: config.nodeEnvironment === "production",
     trustProxyHops: config.trustProxyHops,
+    dashboardBaseUrl: config.dashboardBaseUrl,
+    googleOAuthClientId: config.googleOAuthClientId,
+    googleOAuthClientSecret: config.googleOAuthClientSecret,
+    resendApiKey: config.resendApiKey,
+    emailFromAddress: config.emailFromAddress,
   });
 
   const server = app.listen(config.port, () => {

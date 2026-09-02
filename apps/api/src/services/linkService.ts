@@ -20,8 +20,7 @@ import { hasLinkReachedExpiry } from "../domain/linkState";
 import { buildShortUrl } from "../domain/shortUrlBuilder";
 import { validateAndNormalizeDestinationUrl } from "../domain/urlValidation";
 import type { LinkRepository } from "../repositories/linkRepository";
-
-const POSTGRES_UNIQUE_VIOLATION_ERROR_CODE = "23505";
+import { isPostgresUniqueViolation } from "../utils/postgresErrors";
 
 export interface CreateLinkResult {
   data: CreateLinkResponseData;
@@ -234,15 +233,6 @@ export class LinkService {
     // failure invalidating the cache here does not undo it, per Rule A-02.
     await this.redirectCacheRepository.deleteCachedRedirectLink(deletedLink.shortCode);
   }
-}
-
-function isPostgresUniqueViolation(thrownError: unknown): boolean {
-  if (typeof thrownError !== "object" || thrownError === null) {
-    return false;
-  }
-
-  const maybeDatabaseError = thrownError as { code?: unknown };
-  return maybeDatabaseError.code === POSTGRES_UNIQUE_VIOLATION_ERROR_CODE;
 }
 
 function clampPageSize(requestedLimit: number | null): number {

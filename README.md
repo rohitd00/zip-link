@@ -36,8 +36,11 @@ isn't a claim left untested — it's [measured below](#benchmarks).
   (only an HMAC hash); city-level geography is suppressed below a small event threshold so
   a handful of clicks can't identify a specific person's location.
 - **A modern, accessible dashboard** — React 19 + Tailwind, first-class light and dark
-  themes (not a filter over one default), keyboard-operable throughout, no sign-up
-  required (link ownership uses a signed anonymous session).
+  themes (not a filter over one default), keyboard-operable throughout.
+- **Accounts are optional, not required.** Create links anonymously (a signed session
+  cookie tracks them) or sign up with email/password or Google to keep every link you make
+  organized under one account — the two modes share the exact same link-management code,
+  see the [system design doc](docs/10-system-design.md#7-the-ownership-model--the-single-most-important-abstraction-in-this-codebase).
 - **Production-hardening that's actually there**: structured logs with automatic
   redaction of anything secret-shaped, a `/metrics` endpoint, layered health checks, rate
   limiting, and a fully containerized deployment (API, worker, dashboard, Postgres, Redis)
@@ -233,6 +236,7 @@ own machine.
 | Doc                                                           | What's in it                                                                                                           |
 | ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | **[Technical reference](docs/09-technical-reference.md)**     | Full setup guide, complete API reference, security/privacy behavior, backup & retention, and the full benchmark tables |
+| **[System design](docs/10-system-design.md)**                 | The full "why": architecture diagrams, every major design decision explained, and the trade-offs accepted              |
 | [Product requirements](docs/01-prd.md)                        | What ZipLink is for and who it's for                                                                                   |
 | [Technical specification](docs/02-technical-specification.md) | System design and API contracts                                                                                        |
 | [App flow](docs/03-app-flow.md)                               | User-facing flows through the product                                                                                  |

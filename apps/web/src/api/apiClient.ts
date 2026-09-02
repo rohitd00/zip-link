@@ -1,6 +1,14 @@
 import type { AnalyticsResponseData } from "@shared/contracts/analytics";
 import type { ApplicationErrorResponseBody } from "@shared/contracts/applicationError";
 import type {
+  AuthSuccessResponseData,
+  CurrentUserResponseData,
+  LoginRequestBody,
+  RequestPasswordResetRequestBody,
+  ResetPasswordRequestBody,
+  SignupRequestBody,
+} from "@shared/contracts/auth";
+import type {
   CreateLinkRequestBody,
   CreateLinkResponseData,
   GetLinkDetailResponseData,
@@ -135,4 +143,43 @@ export const apiClient = {
       method: "DELETE",
     });
   },
+
+  getCurrentUser(): Promise<{ data: CurrentUserResponseData }> {
+    return sendJsonRequest("/api/auth/me", { method: "GET" });
+  },
+
+  signup(requestBody: SignupRequestBody): Promise<{ data: AuthSuccessResponseData }> {
+    return sendJsonRequest("/api/auth/signup", {
+      method: "POST",
+      body: JSON.stringify(requestBody),
+    });
+  },
+
+  login(requestBody: LoginRequestBody): Promise<{ data: AuthSuccessResponseData }> {
+    return sendJsonRequest("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify(requestBody),
+    });
+  },
+
+  logout(): Promise<void> {
+    return sendJsonRequest("/api/auth/logout", { method: "POST" });
+  },
+
+  requestPasswordReset(requestBody: RequestPasswordResetRequestBody): Promise<void> {
+    return sendJsonRequest("/api/auth/request-password-reset", {
+      method: "POST",
+      body: JSON.stringify(requestBody),
+    });
+  },
+
+  resetPassword(requestBody: ResetPasswordRequestBody): Promise<void> {
+    return sendJsonRequest("/api/auth/reset-password", {
+      method: "POST",
+      body: JSON.stringify(requestBody),
+    });
+  },
 };
+
+/** Absolute path the browser should navigate to for "Continue with Google". */
+export const GOOGLE_SIGN_IN_URL = "/api/auth/google";

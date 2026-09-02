@@ -70,3 +70,29 @@ export class RateLimitedError extends ApplicationError {
     this.retryAfterSeconds = retryAfterSeconds;
   }
 }
+
+export class EmailAlreadyInUseError extends ApplicationError {
+  constructor() {
+    super("EMAIL_ALREADY_IN_USE", "An account with that email address already exists.", [
+      { field: "email", message: "An account with that email address already exists." },
+    ]);
+    this.name = "EmailAlreadyInUseError";
+  }
+}
+
+export class InvalidCredentialsError extends ApplicationError {
+  constructor() {
+    // Deliberately the same message whether the email doesn't exist or the
+    // password is wrong — confirming which one it was would let an
+    // attacker enumerate registered email addresses one guess at a time.
+    super("INVALID_CREDENTIALS", "That email or password is incorrect.");
+    this.name = "InvalidCredentialsError";
+  }
+}
+
+export class InvalidOrExpiredTokenError extends ApplicationError {
+  constructor(message = "This link is invalid or has expired. Request a new one.") {
+    super("INVALID_OR_EXPIRED_TOKEN", message);
+    this.name = "InvalidOrExpiredTokenError";
+  }
+}

@@ -26,7 +26,7 @@ export function LinkListItem({ link }: { link: LinkListItemData }) {
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <Link
-              to={`/links/${link.shortCode}`}
+              to={`/dashboard/links/${link.shortCode}`}
               className="text-sm font-semibold text-accent hover:text-accent-hover hover:underline"
             >
               {link.shortUrl}
@@ -45,7 +45,7 @@ export function LinkListItem({ link }: { link: LinkListItemData }) {
             {link.totalClicks.toLocaleString()} clicks
           </p>
           <Link
-            to={`/links/${link.shortCode}`}
+            to={`/dashboard/links/${link.shortCode}`}
             className="text-sm font-medium text-text-muted transition-colors hover:text-accent"
             aria-label={`View details for ${link.shortUrl}`}
           >

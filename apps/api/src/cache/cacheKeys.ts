@@ -11,3 +11,10 @@ export function buildRedirectCacheKey(shortCode: string): string {
 export function buildCreationRateLimitKey(ownerType: string, ownerId: string): string {
   return `rate-limit:create:${ownerType}:${ownerId}`;
 }
+
+// A separate keyspace from the link-creation rate limit above, so a burst
+// of login attempts and a burst of link creation never eat into each
+// other's quota even for the same owner.
+export function buildAuthRateLimitKey(ownerType: string, ownerId: string): string {
+  return `rate-limit:auth:${ownerType}:${ownerId}`;
+}

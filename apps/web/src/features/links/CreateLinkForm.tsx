@@ -205,7 +205,7 @@ export function CreateLinkForm({ onLinkCreated }: CreateLinkFormProps) {
           </div>
           <p className="mt-1.5 truncate text-xs text-text-muted">Opens {successResult.longUrl}</p>
           <Link
-            to={`/links/${successResult.shortCode}`}
+            to={`/dashboard/links/${successResult.shortCode}`}
             className="mt-2 inline-block text-sm font-medium text-accent hover:text-accent-hover"
           >
             View analytics →

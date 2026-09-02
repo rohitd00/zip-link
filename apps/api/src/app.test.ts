@@ -36,8 +36,15 @@ beforeAll(() => {
     // realistic number of creation requests for one owner.
     createRateLimitMaxRequests: 1000,
     createRateLimitWindowSeconds: 900,
+    authRateLimitMaxRequests: 1000,
+    authRateLimitWindowSeconds: 900,
     isProductionEnvironment: false,
     trustProxyHops: 0,
+    dashboardBaseUrl: "https://dashboard.test",
+    googleOAuthClientId: null,
+    googleOAuthClientSecret: null,
+    resendApiKey: null,
+    emailFromAddress: "ZipLink <test@ziplink.test>",
   });
 });
 

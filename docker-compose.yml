@@ -19,6 +19,13 @@ services:
       CREATE_RATE_LIMIT_MAX_REQUESTS: 20
       CREATE_RATE_LIMIT_WINDOW_SECONDS: 900
       LOG_LEVEL: info
+      DASHBOARD_BASE_URL: ${DASHBOARD_BASE_URL:-http://localhost:5173}
+      GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
+      GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM_ADDRESS: ${EMAIL_FROM_ADDRESS:-ZipLink <onboarding@resend.dev>}
+      AUTH_RATE_LIMIT_MAX_REQUESTS: 10
+      AUTH_RATE_LIMIT_WINDOW_SECONDS: 900
     depends_on:
       postgres:
         condition: service_healthy
