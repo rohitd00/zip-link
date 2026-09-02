@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Product | URL Shortener with Analytics at Scale |
+| Product | ZipLink |
 | Document | Technical Specification |
 | Version | 1.0 |
 | Status | Implementation-ready draft |
@@ -145,7 +145,7 @@ The dashboard must represent asynchronously processed data honestly: a small mes
 ## 6. Recommended Repository Layout
 
 ```text
-url-shortener-analytics/
+ziplink/
 ├── apps/
 │   ├── api/
 │   │   └── src/

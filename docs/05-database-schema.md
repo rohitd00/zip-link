@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Product | URL Shortener with Analytics at Scale |
+| Product | ZipLink |
 | Document | Database Schema Specification |
 | Version | 1.0 |
 | Database | PostgreSQL 16+ recommended |

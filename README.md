@@ -1,6 +1,6 @@
-# URL Shortener with Analytics at Scale
+# ZipLink
 
-A URL-shortening service built around one core idea: **redirects must stay fast, and
+A URL-shortening service with analytics at scale, built around one core idea: **redirects must stay fast, and
 analytics must never slow them down.** Redirect resolution is a cache-first, low-latency
 read path. Click analytics are captured asynchronously through a queue and processed by a
 separate worker, so a slow database write or GeoIP lookup can never delay a visitor.
@@ -238,7 +238,7 @@ This starts only the Redis service from `docker-compose.yml` (PostgreSQL stays n
 set up in step 2). Confirm it's reachable:
 
 ```bash
-docker exec url-shortener-redis redis-cli ping   # expect PONG
+docker exec ziplink-redis redis-cli ping   # expect PONG
 ```
 
 If `docker` isn't on your `PATH` even though Docker Desktop is running, it's likely
@@ -725,7 +725,7 @@ with no growth across the run, i.e. no indication of a memory leak under sustain
 ### Cold lookup (cache miss)
 
 ```bash
-docker exec url-shortener-redis redis-cli del "redirect:link:benchmark-redirect"
+docker exec ziplink-redis redis-cli del "redirect:link:benchmark-redirect"
 curl -w "%{time_total}s\n" http://localhost:3000/benchmark-redirect   # forces a PostgreSQL fallback + cache backfill
 ```
 

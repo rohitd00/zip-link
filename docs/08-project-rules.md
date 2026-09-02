@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Product | URL Shortener with Analytics at Scale |
+| Product | ZipLink |
 | Document | Project Rules and Engineering Standards |
 | Version | 1.0 |
 | Applies to | API, worker, web app, database migrations, infrastructure, tests, documentation, and agents |
@@ -541,7 +541,7 @@ Deleting a link requires explicit confirmation and plainly states that the short
 
 ### Rule D-01 — Keep specifications synchronized
 
-When implementation changes product behavior, architecture, API contract, schema, design, or operational behavior, update the matching document in `docs/url-shortener-analytics/` in the same change set.
+When implementation changes product behavior, architecture, API contract, schema, design, or operational behavior, update the matching document in `docs/` in the same change set.
 
 ### Rule D-02 — Document actual behavior
 

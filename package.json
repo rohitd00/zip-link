@@ -1,5 +1,5 @@
 {
-  "name": "url-shortener-analytics",
+  "name": "ziplink",
   "version": "0.1.0",
   "private": true,
   "description": "URL shortener with cache-first redirects and asynchronous click analytics.",

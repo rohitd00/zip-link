@@ -21,7 +21,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent text-white">
               <Link2 className="h-3.5 w-3.5" aria-hidden="true" />
             </span>
-            Shortlink
+            ZipLink
           </Link>
           <div className="flex items-center gap-2">
             <Link

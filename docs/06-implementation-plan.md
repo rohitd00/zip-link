@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Product | URL Shortener with Analytics at Scale |
+| Product | ZipLink |
 | Document | Implementation Plan |
 | Version | 1.0 |
 | Intended cadence | One-week focused build, expandable to two weeks for polish and testing |

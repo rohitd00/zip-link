@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Product | URL Shortener with Analytics at Scale |
+| Product | ZipLink |
 | Document | Product Requirements Document |
 | Version | 1.0 |
 | Status | Draft for implementation |

@@ -4,7 +4,7 @@
 
 | Field | Value |
 | --- | --- |
-| Product | URL Shortener with Analytics at Scale |
+| Product | ZipLink |
 | Document | Design Specification |
 | Version | 3.0 |
 | Design direction | Modern SaaS dashboard — Apple's material clarity, Stripe's confident polish, Vercel's precision, and daemondoc.online's dark, developer-grade feel. First-class light **and** dark themes. |
@@ -207,7 +207,7 @@ Rules for small screens:
 
 ```text
 ┌────────────────────────────────────────────────────────────────┐
-│  ◇ Shortlink                                      Links   ☾/☀  │
+│  ◇ ZipLink                                      Links   ☾/☀  │
 ├────────────────────────────────────────────────────────────────┤
 │                                                                │
 │                     centered page content                      │
@@ -386,7 +386,7 @@ Links list / empty state
 
 ```text
 ┌────────────────────────────────────────────────────────────────────┐
-│ ◇ Shortlink                                             Links  ☾/☀  │
+│ ◇ ZipLink                                             Links  ☾/☀  │
 ├────────────────────────────────────────────────────────────────────┤
 │                                                                    │
 │ Your links                                                         │
@@ -605,7 +605,7 @@ Behavior:
 ### 11.1 Link unavailable (404)
 
 ```text
-◇ Shortlink
+◇ ZipLink
 
 This link is unavailable
 It may have been removed, or the address may be incorrect.
@@ -616,7 +616,7 @@ It may have been removed, or the address may be incorrect.
 ### 11.2 Link expired (410)
 
 ```text
-◇ Shortlink
+◇ ZipLink
 
 This link has expired
 The person who created it set an end time for this link.
