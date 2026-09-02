@@ -172,6 +172,25 @@ export function buildApiApp(options: BuildApiAppOptions): Express {
   app.use(createHealthRoutes(healthController));
   app.use(createMetricsRoutes(metricsController));
 
+  // TEMPORARY diagnostic for the TRUST_PROXY_HOPS deployment issue — never
+  // exposes the raw IP itself (hop count and a private-range boolean only),
+  // to be removed once the correct hop count for this deployment is found.
+  app.get("/debug/proxy-info", (request, response) => {
+    const rawHeader = request.headers["x-forwarded-for"];
+    const headerValue = Array.isArray(rawHeader) ? rawHeader.join(",") : (rawHeader ?? null);
+    const hopCount = headerValue === null ? 0 : headerValue.split(",").length;
+    const resolvedIp = request.ip ?? null;
+    const isPrivateOrUnroutable =
+      resolvedIp === null ||
+      /^(10\.|127\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|::1$|fc|fd|fe80:)/.test(resolvedIp);
+
+    response.json({
+      xForwardedForHopCount: hopCount,
+      resolvedIpIsPrivateOrUnroutable: isPrivateOrUnroutable,
+      trustProxyHopsConfigured: options.trustProxyHops,
+    });
+  });
+
   // Session lookup runs before owner-context resolution, since a signed-in
   // user's identity (if any) takes priority over the anonymous cookie —
   // see ownerContextMiddleware.ts's own comment on this order.
