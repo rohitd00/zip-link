@@ -388,7 +388,7 @@ genuinely-free combination that covers all of them:
 | --- | --- | --- |
 | Dashboard (`apps/web`) | Vercel | Static hosting, never sleeps (no cold start), and supports the rewrite trick below |
 | API (`apps/api`) | Render (free Web Service) | Runs Node directly; free tier sleeps after ~15 minutes idle (30–60s cold start on the next request — an honest, acceptable trade-off for a free demo) |
-| Analytics worker (`apps/worker`) | Render (free Background Worker) | A distinct service type built for a long-lived process with no HTTP endpoint, unlike serverless-only platforms |
+| Analytics worker (`apps/worker`) | Render (free Web Service) | Render discontinued its free Background Worker plan; the worker now optionally binds `$PORT` (see `apps/worker/src/healthServer.ts`) purely so it qualifies as a free Web Service — it does no real HTTP work either way, and this server never starts locally or in docker-compose since `PORT` is never set for this process there |
 | PostgreSQL | [Neon](https://neon.tech) | A genuinely free tier with no forced expiry |
 | Redis | [Upstash](https://upstash.com) | Free tier, and — importantly — speaks the real Redis protocol over a normal connection (use the `rediss://` connection string it gives you, not its separate REST API), so BullMQ works against it unmodified |
 
@@ -426,10 +426,13 @@ genuinely-free combination that covers all of them:
 1. Create the Neon project; run `npm run migrate:up` against its connection string once
    (from your own machine) to create the schema.
 2. Create the Upstash Redis database; copy its `rediss://` connection string.
-3. Deploy `apps/api` to Render as a Web Service, and `apps/worker` to Render as a
-   Background Worker — both pointed at the same Neon `DATABASE_URL` and Upstash
-   `REDIS_URL`, with real `IP_HASH_SECRET`/`OWNER_COOKIE_SECRET` values, `NODE_ENV=production`,
-   and `TRUST_PROXY_HOPS=1`.
+3. Deploy `apps/api` and `apps/worker` to Render, both as free Web Services (Render no
+   longer offers a free Background Worker plan — the worker only binds `$PORT` to
+   qualify, it does no real HTTP work), pointed at the same Neon `DATABASE_URL` and
+   Upstash `REDIS_URL`, with real `IP_HASH_SECRET`/`OWNER_COOKIE_SECRET` values,
+   `NODE_ENV=production`, and `TRUST_PROXY_HOPS=1` on the API. A `render.yaml` Blueprint
+   at the repo root predefines both services' Docker settings if you'd rather use
+   Render's Blueprint deploy flow than configure each by hand.
 4. Deploy `apps/web` to Vercel (build command `npm run build:web`, output directory
    `apps/web/dist` — both already set in `vercel.json`), after filling in the real Render
    API URL in that file's `rewrites` block.

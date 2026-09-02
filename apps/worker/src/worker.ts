@@ -1,6 +1,7 @@
 import { Worker } from "bullmq";
 import { CLICK_ANALYTICS_QUEUE_NAME } from "@shared/contracts/clickEventJob";
 import { loadWorkerEnvironmentConfig } from "./config/environment";
+import { startHealthServerIfPortConfigured } from "./healthServer";
 import { logger } from "./observability/logger";
 import { processClickEventJob } from "./processors/clickEventProcessor";
 import { createWorkerRedisConnection } from "./queue/workerRedisConnection";
@@ -12,6 +13,7 @@ function startAnalyticsWorker(): void {
   const databasePool = createDatabasePool(config.databaseConnectionString);
   const redisConnection = createWorkerRedisConnection(config.redisConnectionString);
   const clickEventRepository = new ClickEventRepository(databasePool);
+  const healthServer = startHealthServerIfPortConfigured();
 
   const worker = new Worker(
     CLICK_ANALYTICS_QUEUE_NAME,
@@ -53,6 +55,17 @@ function startAnalyticsWorker(): void {
 
     worker
       .close()
+      .then(
+        () =>
+          new Promise<void>((resolve) => {
+            if (healthServer === null) {
+              resolve();
+              return;
+            }
+
+            healthServer.close(() => resolve());
+          }),
+      )
       .then(() => Promise.allSettled([databasePool.end(), redisConnection.quit()]))
       .then((results) => {
         const failure = results.find((result) => result.status === "rejected");

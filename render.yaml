@@ -62,12 +62,17 @@ services:
       - key: LOG_LEVEL
         value: info
 
-  - type: worker
+  - type: web
     name: ziplink-worker
     runtime: docker
     plan: free
     dockerfilePath: ./apps/worker/Dockerfile
     dockerContext: .
+    # Render's free plan no longer offers a Background Worker type — this
+    # service is deployed as a Web Service instead, and binds $PORT purely
+    # to satisfy that (see apps/worker/src/healthServer.ts). It does no
+    # real HTTP work; the actual job is consuming the BullMQ queue.
+    healthCheckPath: /
     envVars:
       - key: NODE_ENV
         value: production
