@@ -340,6 +340,15 @@ function AnalyticsContent({
     );
   }
 
+  // `?? 0` / `?? []` below: defensive against an API response from a
+  // moment mid-deploy that predates these fields (Vercel and Render deploy
+  // independently — see docs/10-system-design.md Section 12.2 on the
+  // split-host deployment this project uses). Real incident, not a
+  // hypothetical: the first version of this page crashed to a blank
+  // screen during exactly this window before these fallbacks were added.
+  const uniqueVisitors = analytics.uniqueVisitors ?? 0;
+  const operatingSystems = analytics.operatingSystems ?? [];
+
   const totalClicksPercentChange =
     previousPeriodAnalytics === null
       ? undefined
@@ -347,7 +356,7 @@ function AnalyticsContent({
   const uniqueVisitorsPercentChange =
     previousPeriodAnalytics === null
       ? undefined
-      : computePercentChange(analytics.uniqueVisitors, previousPeriodAnalytics.uniqueVisitors);
+      : computePercentChange(uniqueVisitors, previousPeriodAnalytics.uniqueVisitors ?? 0);
 
   return (
     <div className="flex flex-col gap-4">
@@ -363,7 +372,7 @@ function AnalyticsContent({
         />
         <MetricCard
           label="Unique visitors"
-          value={analytics.uniqueVisitors}
+          value={uniqueVisitors}
           icon={Users}
           percentChangeVsPrevious={uniqueVisitorsPercentChange}
           supportingText="Approximated by distinct hashed IP addresses"
@@ -387,7 +396,7 @@ function AnalyticsContent({
           sections={[
             { label: "Devices", rows: analytics.devices },
             { label: "Browsers", rows: analytics.browsers },
-            { label: "Operating systems", rows: analytics.operatingSystems },
+            { label: "Operating systems", rows: operatingSystems },
           ]}
         />
         <BreakdownCard

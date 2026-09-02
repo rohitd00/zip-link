@@ -50,7 +50,7 @@ export function BreakdownCard({ title, icon: Icon, rows, sections }: BreakdownCa
           {sections.map((section) => (
             <div key={section.label}>
               <p className="text-xs font-medium text-text-muted">{section.label}</p>
-              <BreakdownRankedList rows={section.rows} />
+              <BreakdownRankedList rows={section.rows ?? []} />
             </div>
           ))}
         </div>

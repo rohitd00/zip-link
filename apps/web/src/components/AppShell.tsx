@@ -3,6 +3,7 @@ import { Link2, LogOut } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import type { AuthenticatedUserDto } from "@shared/contracts/auth";
 import { useAuth } from "../auth/AuthContext";
+import { ErrorBoundary } from "./ErrorBoundary";
 import { ThemeToggle } from "./ThemeToggle";
 
 /**
@@ -40,7 +41,9 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </div>
       </header>
-      <main className="mx-auto max-w-6xl px-4 py-10 sm:px-6">{children}</main>
+      <main className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
+        <ErrorBoundary>{children}</ErrorBoundary>
+      </main>
     </div>
   );
 }

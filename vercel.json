@@ -10,6 +10,10 @@
     {
       "source": "/health/:path*",
       "destination": "https://zip-link-api.onrender.com/health/:path*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 }
