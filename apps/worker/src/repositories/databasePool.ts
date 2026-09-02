@@ -8,7 +8,7 @@ export function createDatabasePool(databaseConnectionString: string): Pool {
 
   pool.on("error", (unexpectedError) => {
     logger.error("Unexpected PostgreSQL pool error.", {
-      message: unexpectedError.message,
+      errorMessage: unexpectedError.message,
     });
   });
 

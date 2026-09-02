@@ -263,6 +263,22 @@ describe("GET /health/live and /health/ready", () => {
   });
 });
 
+describe("GET /metrics", () => {
+  it("reports uptime and click-analytics queue depth counts", async () => {
+    const response = await request(app).get("/metrics");
+
+    expect(response.status).toBe(200);
+    expect(typeof response.body.uptimeSeconds).toBe("number");
+    expect(response.body.clickEventQueue).toMatchObject({
+      waitingJobs: expect.any(Number),
+      activeJobs: expect.any(Number),
+      delayedJobs: expect.any(Number),
+      failedJobs: expect.any(Number),
+      completedJobs: expect.any(Number),
+    });
+  });
+});
+
 describe("Redis cache-aside redirect behavior", () => {
   it("populates the cache on creation and serves a redirect from it even if the database row is gone", async () => {
     const createResponse = await request(app)

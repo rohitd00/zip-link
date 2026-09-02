@@ -78,7 +78,7 @@ function parsePayloadOrFailPermanently(job: Job): ReturnType<typeof parseClickEv
     if (thrownError instanceof InvalidClickEventJobError) {
       logger.error("Discarding a click-analytics job with an invalid payload.", {
         jobId: job.id ?? "unknown",
-        message: thrownError.message,
+        errorMessage: thrownError.message,
       });
       throw new UnrecoverableError(thrownError.message);
     }

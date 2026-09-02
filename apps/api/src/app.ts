@@ -9,16 +9,19 @@ import { RedirectCacheRepository } from "./cache/redirectCacheRepository";
 import { AnalyticsController } from "./controllers/analyticsController";
 import { HealthController } from "./controllers/healthController";
 import { LinksController } from "./controllers/linksController";
+import { MetricsController } from "./controllers/metricsController";
 import { RedirectController } from "./controllers/redirectController";
 import { createCreationRateLimitMiddleware } from "./middleware/creationRateLimitMiddleware";
 import { errorHandlerMiddleware } from "./middleware/errorHandlerMiddleware";
 import { createOwnerContextMiddleware } from "./middleware/ownerContextMiddleware";
 import { requestIdMiddleware } from "./middleware/requestIdMiddleware";
+import { requestLoggingMiddleware } from "./middleware/requestLoggingMiddleware";
 import { ClickEventPublisher } from "./queue/clickEventPublisher";
 import { AnalyticsRepository } from "./repositories/analyticsRepository";
 import { LinkRepository } from "./repositories/linkRepository";
 import { createHealthRoutes } from "./routes/healthRoutes";
 import { createLinksRoutes } from "./routes/linksRoutes";
+import { createMetricsRoutes } from "./routes/metricsRoutes";
 import { createRedirectRoutes } from "./routes/redirectRoutes";
 import { AnalyticsService } from "./services/analyticsService";
 import { LinkService } from "./services/linkService";
@@ -73,6 +76,7 @@ export function buildApiApp(options: BuildApiAppOptions): Express {
   );
 
   const healthController = new HealthController(options.databasePool, options.redisClient);
+  const metricsController = new MetricsController(options.clickEventQueue);
   const linksController = new LinksController(linkService);
   const analyticsController = new AnalyticsController(analyticsService);
   const redirectController = new RedirectController(redirectService, clickEventPublisher);
@@ -81,10 +85,12 @@ export function buildApiApp(options: BuildApiAppOptions): Express {
 
   app.use(helmet());
   app.use(requestIdMiddleware);
+  app.use(requestLoggingMiddleware);
   app.use(express.json({ limit: MAX_JSON_REQUEST_BODY_SIZE }));
   app.use(cookieParser(options.ownerCookieSecret));
 
   app.use(createHealthRoutes(healthController));
+  app.use(createMetricsRoutes(metricsController));
 
   app.use(createOwnerContextMiddleware(options.isProductionEnvironment));
   app.use(

@@ -51,7 +51,7 @@ export function errorHandlerMiddleware(
   logger.error("Unhandled error while processing a request.", {
     requestId: request.requestId,
     route: request.path,
-    message: thrownError instanceof Error ? thrownError.message : "Unknown error",
+    errorMessage: thrownError instanceof Error ? thrownError.message : "Unknown error",
   });
 
   const responseBody: ApplicationErrorResponseBody = {

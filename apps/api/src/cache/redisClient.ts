@@ -17,7 +17,7 @@ export function createRedisClient(redisConnectionString: string): Redis {
   });
 
   redisClient.on("error", (redisError) => {
-    logger.error("Unexpected Redis client error.", { message: redisError.message });
+    logger.error("Unexpected Redis client error.", { errorMessage: redisError.message });
   });
 
   return redisClient;

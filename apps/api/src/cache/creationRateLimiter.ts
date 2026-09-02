@@ -49,7 +49,7 @@ export class CreationRateLimiter {
       // Abuse prevention is a secondary concern to keeping the product
       // usable, so a rate-limit check failure fails open.
       logger.error("Redis rate-limit check failed; allowing the request through.", {
-        message: thrownError instanceof Error ? thrownError.message : "Unknown error",
+        errorMessage: thrownError instanceof Error ? thrownError.message : "Unknown error",
       });
       return { allowed: true };
     }

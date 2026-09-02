@@ -2,6 +2,7 @@ import type { RedirectCachePayload } from "@shared/contracts/redirectCache";
 import type { RedirectCacheRepository } from "../cache/redirectCacheRepository";
 import { calculateRedirectCacheTtlSeconds } from "../domain/cacheTtl";
 import { evaluateLinkLifecycleState, hasLinkReachedExpiry } from "../domain/linkState";
+import { ServiceUnavailableError } from "../domain/applicationErrors";
 import type { LinkRepository } from "../repositories/linkRepository";
 
 export type CacheReadOutcome = "hit" | "miss" | "error";
@@ -69,7 +70,21 @@ export class RedirectService {
     currentTime: Date,
     cacheResult: CacheReadOutcome,
   ): Promise<RedirectResolution> {
-    const link = await this.linkRepository.findPublicLinkByShortCode(shortCode);
+    // PostgreSQL is the only authoritative source once the cache has
+    // missed or failed, so a database error here must never be allowed to
+    // surface as a generic 500 (or, worse, be swallowed into a false
+    // "not found"). Translating it into ServiceUnavailableError gives the
+    // client a documented, controlled 503 instead — see Rule A-02 and the
+    // Phase 7 verification checklist in 06-implementation-plan.md.
+    let link;
+
+    try {
+      link = await this.linkRepository.findPublicLinkByShortCode(shortCode);
+    } catch {
+      throw new ServiceUnavailableError(
+        "The service is temporarily unavailable. Please try again shortly.",
+      );
+    }
 
     if (link === null) {
       return { outcome: "not_found", cacheResult };

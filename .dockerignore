@@ -1,0 +1,11 @@
+node_modules
+.git
+dist
+build
+coverage
+apps/web/dist
+docker/postgres-data
+docker/redis-data
+.env
+.env.local
+*.log

@@ -57,7 +57,7 @@ export class ClickEventPublisher {
         "Failed to publish a click-analytics event. The redirect itself is unaffected; this click will not appear in analytics.",
         {
           shortCode: input.shortCode,
-          message: thrownError instanceof Error ? thrownError.message : "Unknown error",
+          errorMessage: thrownError instanceof Error ? thrownError.message : "Unknown error",
         },
       );
       return "failed";

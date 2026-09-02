@@ -35,12 +35,12 @@ function startAnalyticsWorker(): void {
     logger.error("Click-analytics job failed.", {
       jobId: job?.id ?? "unknown",
       attemptsMade: job?.attemptsMade ?? 0,
-      message: failureError.message,
+      errorMessage: failureError.message,
     });
   });
 
   worker.on("error", (workerError) => {
-    logger.error("Unexpected analytics worker error.", { message: workerError.message });
+    logger.error("Unexpected analytics worker error.", { errorMessage: workerError.message });
   });
 
   logger.info("Analytics worker started.", {
@@ -59,7 +59,8 @@ function startAnalyticsWorker(): void {
 
         if (failure !== undefined && failure.status === "rejected") {
           logger.error("Error while closing a dependency connection during shutdown.", {
-            message: failure.reason instanceof Error ? failure.reason.message : "Unknown error",
+            errorMessage:
+              failure.reason instanceof Error ? failure.reason.message : "Unknown error",
           });
           process.exit(1);
           return;
@@ -70,7 +71,7 @@ function startAnalyticsWorker(): void {
       })
       .catch((shutdownError: unknown) => {
         logger.error("Unexpected error during analytics worker shutdown.", {
-          message: shutdownError instanceof Error ? shutdownError.message : "Unknown error",
+          errorMessage: shutdownError instanceof Error ? shutdownError.message : "Unknown error",
         });
         process.exit(1);
       });

@@ -47,7 +47,8 @@ function startApiServer(): void {
 
           if (failure !== undefined && failure.status === "rejected") {
             logger.error("Error while closing a dependency connection during shutdown.", {
-              message: failure.reason instanceof Error ? failure.reason.message : "Unknown error",
+              errorMessage:
+                failure.reason instanceof Error ? failure.reason.message : "Unknown error",
             });
             process.exit(1);
             return;
@@ -58,7 +59,7 @@ function startApiServer(): void {
         })
         .catch((shutdownError: unknown) => {
           logger.error("Unexpected error during shutdown.", {
-            message: shutdownError instanceof Error ? shutdownError.message : "Unknown error",
+            errorMessage: shutdownError instanceof Error ? shutdownError.message : "Unknown error",
           });
           process.exit(1);
         });

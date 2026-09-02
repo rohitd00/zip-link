@@ -92,7 +92,10 @@ export function LinkDetailPage() {
     return buildRangeForPreset(rangePreset, rangeAnchorTime);
   }, [rangePreset, customFrom, customTo, rangeAnchorTime]);
 
-  const fallbackRange = useMemo(() => buildRangeForPreset("30d", rangeAnchorTime), [rangeAnchorTime]);
+  const fallbackRange = useMemo(
+    () => buildRangeForPreset("30d", rangeAnchorTime),
+    [rangeAnchorTime],
+  );
   const { analytics, loadingState, isRefreshing, refresh } = useLinkAnalytics(
     shortCode,
     activeRange ?? fallbackRange,

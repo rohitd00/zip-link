@@ -17,7 +17,8 @@
     "migrate:up": "node-pg-migrate up -m database/migrations",
     "migrate:down": "node-pg-migrate down -m database/migrations",
     "migrate:create": "node-pg-migrate create -m database/migrations --",
-    "maintain:partitions": "tsx scripts/create-future-click-event-partitions.ts"
+    "maintain:partitions": "tsx scripts/create-future-click-event-partitions.ts",
+    "seed": "tsx scripts/seedSampleData.ts"
   },
   "dependencies": {
     "bullmq": "^6.3.4",
@@ -67,6 +68,6 @@
     "vitest": "^2.1.8"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=24.0.0"
   }
 }

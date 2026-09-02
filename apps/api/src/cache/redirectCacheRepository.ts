@@ -38,7 +38,7 @@ export class RedirectCacheRepository {
       return this.parseStoredPayload(shortCode, rawValue);
     } catch (thrownError) {
       logger.error("Redis read failed while resolving a redirect; falling back to the database.", {
-        message: getErrorMessage(thrownError),
+        errorMessage: getErrorMessage(thrownError),
       });
       return { outcome: "error" };
     }
@@ -59,7 +59,7 @@ export class RedirectCacheRepository {
     } catch (thrownError) {
       logger.error(
         "Redis write failed while caching a redirect. The redirect itself is unaffected.",
-        { message: getErrorMessage(thrownError) },
+        { errorMessage: getErrorMessage(thrownError) },
       );
     }
   }
@@ -69,7 +69,7 @@ export class RedirectCacheRepository {
       await this.redisClient.del(buildRedirectCacheKey(shortCode));
     } catch (thrownError) {
       logger.error("Redis delete failed while invalidating a redirect cache entry.", {
-        message: getErrorMessage(thrownError),
+        errorMessage: getErrorMessage(thrownError),
       });
     }
   }

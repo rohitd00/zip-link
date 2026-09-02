@@ -18,7 +18,7 @@ export function createDatabasePool(databaseConnectionString: string): Pool {
     // We still want this visible in logs because repeated occurrences
     // usually mean the database is unreachable.
     logger.error("Unexpected PostgreSQL pool error.", {
-      message: unexpectedError.message,
+      errorMessage: unexpectedError.message,
     });
   });
 
