@@ -481,6 +481,8 @@ Use compact segmented range shortcuts and a custom date-range popover or simple 
 
 The active range gets a subtle accent-soft background and accent text, not a large filled button. The UI shows timezone in a small supporting label: “Times shown in UTC” or the selected IANA timezone.
 
+A small icon-only refresh control sits beside the range selector so the owner can pull the latest click counts without changing the range or reloading the page. It is one of the few icon-only controls permitted by Section 2.2, justified because the action is supplementary (data already on screen keeps showing while it runs) and it carries an accessible label and native tooltip. While refreshing, the icon spins in place and existing analytics content stays visible rather than being replaced by a loading skeleton.
+
 ### 9.5 Analytics hierarchy
 
 1. Total clicks answers “How much activity?”

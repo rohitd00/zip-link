@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Globe2, LineChart, Monitor, MousePointerClick, Share2 } from "lucide-react";
+import {
+  ArrowLeft,
+  Globe2,
+  LineChart,
+  Monitor,
+  MousePointerClick,
+  RefreshCw,
+  Share2,
+} from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { apiClient } from "../api/apiClient";
 import { BreakdownCard } from "../components/BreakdownCard";
@@ -31,6 +39,12 @@ export function LinkDetailPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  // A preset range (e.g. "30 days") always means "the 30 days ending now."
+  // Recomputing this anchor moves that window's end forward so the Refresh
+  // button can actually reach clicks that happened after the page loaded,
+  // instead of silently re-requesting the exact same frozen window.
+  const [rangeAnchorTime, setRangeAnchorTime] = useState(() => new Date());
 
   const shortCode = code ?? "";
 
@@ -75,11 +89,24 @@ export function LinkDetailPage() {
       };
     }
 
-    return buildRangeForPreset(rangePreset, new Date());
-  }, [rangePreset, customFrom, customTo]);
+    return buildRangeForPreset(rangePreset, rangeAnchorTime);
+  }, [rangePreset, customFrom, customTo, rangeAnchorTime]);
 
-  const fallbackRange = useMemo(() => buildRangeForPreset("30d", new Date()), []);
-  const { analytics, loadingState } = useLinkAnalytics(shortCode, activeRange ?? fallbackRange);
+  const fallbackRange = useMemo(() => buildRangeForPreset("30d", rangeAnchorTime), [rangeAnchorTime]);
+  const { analytics, loadingState, isRefreshing, refresh } = useLinkAnalytics(
+    shortCode,
+    activeRange ?? fallbackRange,
+  );
+
+  function handleRefreshClick(): void {
+    // A custom range has fixed, user-chosen boundaries that refreshing
+    // should not move; only a preset range's end advances to "now."
+    if (rangePreset !== "custom") {
+      setRangeAnchorTime(new Date());
+    }
+
+    refresh();
+  }
 
   async function handleConfirmDelete(): Promise<void> {
     setIsDeleting(true);
@@ -156,7 +183,22 @@ export function LinkDetailPage() {
       <div>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-[15px] font-semibold tracking-tight text-text">Analytics</h2>
-          <RangeSelector selectedPreset={rangePreset} onSelectPreset={setRangePreset} />
+          <div className="flex items-center gap-2">
+            <RangeSelector selectedPreset={rangePreset} onSelectPreset={setRangePreset} />
+            <button
+              type="button"
+              onClick={handleRefreshClick}
+              disabled={isRefreshing || loadingState === "loading"}
+              aria-label="Refresh analytics"
+              title="Refresh analytics"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-[var(--radius-control)] border border-border bg-surface text-text-muted shadow-[var(--shadow-card)] transition-colors hover:border-border-strong hover:bg-surface-subtle hover:text-text disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <RefreshCw
+                className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`}
+                aria-hidden="true"
+              />
+            </button>
+          </div>
         </div>
         <p className="mt-1 text-xs text-text-muted">Recent clicks may take a moment to appear.</p>
 
