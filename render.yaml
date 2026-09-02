@@ -1,0 +1,87 @@
+# Render Blueprint — creates both backend services from this one file.
+# Deploy: Render dashboard -> New -> Blueprint -> select this repo.
+#
+# Values marked `sync: false` are secrets or environment-specific URLs that
+# Render will NOT read from here — it prompts you to type each one in during
+# setup (and lets you edit them later under each service's Environment tab).
+# Everything else is a safe-to-commit default matching what's already in
+# .env.example and docker-compose.yml for local development.
+#
+# See docs/09-technical-reference.md#deploying-on-a-free-tier and
+# docs/10-system-design.md#12-deployment-architecture for why these two
+# services exist as separate deployable units in the first place.
+
+services:
+  - type: web
+    name: ziplink-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: .
+    healthCheckPath: /health/ready
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Render puts exactly one reverse proxy in front of every web service.
+      - key: TRUST_PROXY_HOPS
+        value: "1"
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: IP_HASH_SECRET
+        sync: false
+      - key: IP_HASH_KEY_VERSION
+        value: v1
+      - key: OWNER_COOKIE_SECRET
+        sync: false
+      # This service's own public URL, once Render assigns it.
+      - key: PUBLIC_BASE_URL
+        sync: false
+      # The deployed dashboard's URL (Vercel).
+      - key: DASHBOARD_BASE_URL
+        sync: false
+      - key: GOOGLE_OAUTH_CLIENT_ID
+        sync: false
+      - key: GOOGLE_OAUTH_CLIENT_SECRET
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM_ADDRESS
+        value: "ZipLink <onboarding@resend.dev>"
+      - key: AUTH_RATE_LIMIT_MAX_REQUESTS
+        value: "10"
+      - key: AUTH_RATE_LIMIT_WINDOW_SECONDS
+        value: "900"
+      - key: CREATE_RATE_LIMIT_MAX_REQUESTS
+        value: "20"
+      - key: CREATE_RATE_LIMIT_WINDOW_SECONDS
+        value: "900"
+      - key: REDIRECT_CACHE_TTL_SECONDS
+        value: "86400"
+      - key: LOG_LEVEL
+        value: info
+
+  - type: worker
+    name: ziplink-worker
+    runtime: docker
+    plan: free
+    dockerfilePath: ./apps/worker/Dockerfile
+    dockerContext: .
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      # Must be the exact same value as the API service's IP_HASH_SECRET —
+      # both processes have to hash a given IP address to the same output.
+      - key: IP_HASH_SECRET
+        sync: false
+      - key: IP_HASH_KEY_VERSION
+        value: v1
+      - key: ANALYTICS_WORKER_CONCURRENCY
+        value: "10"
+      - key: LOG_LEVEL
+        value: info
