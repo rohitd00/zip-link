@@ -436,6 +436,21 @@ genuinely-free combination that covers all of them:
 4. Deploy `apps/web` to Vercel (build command `npm run build:web`, output directory
    `apps/web/dist` — both already set in `vercel.json`), after filling in the real Render
    API URL in that file's `rewrites` block.
+
+> **Set the API's Render "Health Check Path" to `/health/live`, not `/health/ready`.**
+> Render polls this path continuously (every few seconds) for as long as the service is
+> deployed. `/health/ready` pings real Redis and Postgres on every single call to report
+> dependency status — a real, metered cost on a free-tier Redis plan with a fixed monthly
+> command quota, completely independent of actual application traffic. This isn't
+> theoretical: it's what caused an Upstash command-quota scare (450k/500k monthly commands
+> used) during this project's own development, entirely from Render's own health-check
+> polling. `/health/live` never touches a dependency and is all Render's restart decision
+> actually needs — it only reads the HTTP status code, and Redis failure never changes
+> that anyway (Redis is an optimization, not a correctness dependency; see
+> [Privacy and security behavior](#privacy-and-security-behavior-implemented-so-far)).
+> `render.yaml` already sets this correctly; it only matters if you configure the service
+> by hand instead of via the Blueprint. `HealthController` also caches each dependency
+> check for 10 seconds regardless, as defense in depth against any other frequent poller.
 5. Set `PUBLIC_BASE_URL` on the Render API to whatever domain visitors will actually use
    for short links.
 

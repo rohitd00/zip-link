@@ -18,7 +18,18 @@ services:
     plan: free
     dockerfilePath: ./apps/api/Dockerfile
     dockerContext: .
-    healthCheckPath: /health/ready
+    # Deliberately /health/live, not /health/ready: Render polls this path
+    # continuously (every few seconds) for as long as the service is
+    # deployed, and /health/ready pings real Redis/Postgres dependencies on
+    # every call -- a real, metered-quota cost on a free-tier Redis plan
+    # completely independent of actual application traffic (this is what
+    # caused an Upstash command-quota scare during development). Liveness
+    # never touches a dependency, and it's all Render's own restart
+    # decision actually needs -- it only looks at the HTTP status code, and
+    # Redis failure never changes that anyway (see HealthController's own
+    # comment). Check /health/ready manually or from a real uptime monitor
+    # when you want the fuller dependency breakdown.
+    healthCheckPath: /health/live
     envVars:
       - key: NODE_ENV
         value: production

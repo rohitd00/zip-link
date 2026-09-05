@@ -1,6 +1,6 @@
 import type Redis from "ioredis";
 import type { Pool } from "pg";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HealthController } from "./healthController";
 
 function buildFakeResponse() {
@@ -94,5 +94,52 @@ describe("HealthController", () => {
     await controller.handleReadiness({} as never, response as never);
 
     expect(response.statusCode).toBe(503);
+  });
+
+  describe("dependency check caching", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("reuses a cached result for repeated calls within the cache TTL, instead of re-checking every time", async () => {
+      let databaseCallCount = 0;
+      let redisCallCount = 0;
+      const pool = buildFakePool(() => {
+        databaseCallCount += 1;
+        return Promise.resolve({ rows: [] });
+      });
+      const redisClient = buildFakeRedis(() => {
+        redisCallCount += 1;
+        return Promise.resolve("PONG");
+      });
+      const controller = new HealthController(pool, redisClient);
+
+      await controller.handleReadiness({} as never, buildFakeResponse() as never);
+      await controller.handleReadiness({} as never, buildFakeResponse() as never);
+      await controller.handleReadiness({} as never, buildFakeResponse() as never);
+
+      expect(databaseCallCount).toBe(1);
+      expect(redisCallCount).toBe(1);
+    });
+
+    it("checks again once the cache TTL has expired", async () => {
+      let redisCallCount = 0;
+      const pool = buildFakePool(() => Promise.resolve({ rows: [] }));
+      const redisClient = buildFakeRedis(() => {
+        redisCallCount += 1;
+        return Promise.resolve("PONG");
+      });
+      const controller = new HealthController(pool, redisClient);
+
+      await controller.handleReadiness({} as never, buildFakeResponse() as never);
+      vi.advanceTimersByTime(11_000);
+      await controller.handleReadiness({} as never, buildFakeResponse() as never);
+
+      expect(redisCallCount).toBe(2);
+    });
   });
 });
